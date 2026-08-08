@@ -59,10 +59,10 @@ export function Sidebar() {
     <aside className="fixed inset-y-0 start-0 z-40 flex w-64 flex-col bg-[var(--sidebar)] text-[var(--sidebar-ink)]">
       <div className="shrink-0 border-b border-white/10 px-5 py-6">
         <div className="text-xs tracking-[0.2em] text-emerald-200/80">
-          ALHADARA
+          إدارة المهام
         </div>
         <h1 className="mt-2 text-xl font-bold leading-tight">
-          نظام متابعة مهام المشتريات
+          نظام إدارة المهام
         </h1>
       </div>
 

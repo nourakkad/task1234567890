@@ -10,8 +10,8 @@ const cairo = Cairo({
 });
 
 export const metadata: Metadata = {
-  title: "نظام متابعة مهام المشتريات | Alhadara",
-  description: "نظام إدارة مهام المشتريات بين الإدارة والمدراء والموظفين",
+  title: "إدارة المهام",
+  description: "نظام إدارة المهام بين الإدارة والمدراء والموظفين",
 };
 
 export default function RootLayout({

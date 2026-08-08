@@ -52,11 +52,11 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md card p-8 shadow-xl">
         <div className="mb-6 text-center">
           <div className="text-xs tracking-[0.25em] text-[var(--brand)]">
-            ALHADARA
+            إدارة المهام
           </div>
           <h1 className="mt-2 text-2xl font-bold">تسجيل الدخول</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            نظام متابعة مهام المشتريات
+            نظام إدارة المهام
           </p>
         </div>
 

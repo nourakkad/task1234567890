@@ -1,10 +1,10 @@
-# Alhadara Procurement Task ERP
+# نظام إدارة المهام (Task Management)
 
-Arabic-first RTL web app for managing procurement tasks across three layers:
+Arabic-first RTL web app for task management across three layers:
 
-**CEO → 5 Managers → Employees**
+**CEO → Managers → Employees**
 
-Built from the Excel workbook «نظام متابعة مهام المشتريات» with full modules for tasks, daily updates, suppliers, and samples/documents.
+Modules for tasks, daily updates, suppliers, samples/documents, departments, and team management.
 
 ## Stack
 
