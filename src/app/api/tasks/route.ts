@@ -104,7 +104,7 @@ export async function GET(request: Request) {
 
     const tasks = await Task.find(filter)
       .populate("ownerId", "name email role")
-      .populate("departmentId", "name")
+      .populate("departmentId", "_id name")
       .populate("assignedById", "name role")
       .sort({ updatedAt: -1 })
       .lean();

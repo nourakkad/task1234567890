@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { TASK_PRIORITIES, TASK_STATUSES } from "@/constants/lookups";
+import { apiGet } from "@/lib/client";
 import type { TaskFilterState } from "@/lib/taskFilters";
 
 interface DeptOption {
@@ -8,9 +10,15 @@ interface DeptOption {
   name: string;
 }
 
+interface DepartmentRow {
+  _id: string;
+  name: string;
+}
+
 interface TaskFiltersProps {
   value: TaskFilterState;
   onChange: (next: TaskFilterState) => void;
+  /** Optional override; when omitted and showDepartment, loads from /api/departments */
   departments?: DeptOption[];
   searchPlaceholder?: string;
   showPriority?: boolean;
@@ -20,11 +28,29 @@ interface TaskFiltersProps {
 export function TaskFilters({
   value,
   onChange,
-  departments = [],
+  departments: departmentsProp,
   searchPlaceholder = "رقم المهمة، الاسم، المسؤول...",
   showPriority = true,
   showDepartment = false,
 }: TaskFiltersProps) {
+  const [dbDepartments, setDbDepartments] = useState<DeptOption[]>([]);
+
+  useEffect(() => {
+    if (!showDepartment || departmentsProp) return;
+
+    apiGet<DepartmentRow[]>("/api/departments")
+      .then((rows) =>
+        setDbDepartments(
+          rows
+            .map((d) => ({ id: String(d._id), name: d.name }))
+            .sort((a, b) => a.name.localeCompare(b.name, "ar"))
+        )
+      )
+      .catch(() => setDbDepartments([]));
+  }, [showDepartment, departmentsProp]);
+
+  const departments = departmentsProp ?? dbDepartments;
+
   function patch(partial: Partial<TaskFilterState>) {
     onChange({ ...value, ...partial });
   }

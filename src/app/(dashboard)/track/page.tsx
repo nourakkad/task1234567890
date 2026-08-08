@@ -10,7 +10,6 @@ import { apiGet } from "@/lib/client";
 import {
   EMPTY_TASK_FILTERS,
   filterTasks,
-  uniqueDepartments,
   type TaskFilterState,
 } from "@/lib/taskFilters";
 
@@ -36,7 +35,6 @@ export default function TrackPage() {
       .finally(() => setLoading(false));
   }, [authStatus, session?.user?.role]);
 
-  const departments = useMemo(() => uniqueDepartments(tasks), [tasks]);
   const filtered = useMemo(
     () => filterTasks(tasks, filters),
     [tasks, filters]
@@ -63,7 +61,6 @@ export default function TrackPage() {
       <TaskFilters
         value={filters}
         onChange={setFilters}
-        departments={departments}
         showDepartment={session?.user?.role === "ceo"}
         searchPlaceholder="رقم المهمة، الاسم، المدير، القسم..."
       />

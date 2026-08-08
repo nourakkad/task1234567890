@@ -9,7 +9,6 @@ import { apiGet } from "@/lib/client";
 import {
   EMPTY_TASK_FILTERS,
   filterTasks,
-  uniqueDepartments,
   type TaskFilterState,
 } from "@/lib/taskFilters";
 
@@ -40,7 +39,6 @@ export default function EmployeeReviewPage() {
       .finally(() => setLoading(false));
   }, [authStatus, session?.user?.role]);
 
-  const departments = useMemo(() => uniqueDepartments(tasks), [tasks]);
   const filtered = useMemo(
     () => filterTasks(tasks, filters),
     [tasks, filters]
@@ -68,7 +66,6 @@ export default function EmployeeReviewPage() {
       <TaskFilters
         value={filters}
         onChange={setFilters}
-        departments={departments}
         showDepartment
         searchPlaceholder="رقم المهمة، الموظف، القسم، الرسالة..."
       />

@@ -15,9 +15,14 @@ export const EMPTY_TASK_FILTERS: TaskFilterState = {
 };
 
 function deptId(task: TaskCardData): string {
-  const d = task.departmentId as { _id?: string; name?: string } | null | undefined;
+  const d = task.departmentId as unknown;
   if (!d) return "";
-  if (typeof d === "object" && d._id) return String(d._id);
+  if (typeof d === "string") return d;
+  if (typeof d === "object") {
+    const obj = d as { _id?: unknown; id?: unknown };
+    if (obj._id != null) return String(obj._id);
+    if (obj.id != null) return String(obj.id);
+  }
   return "";
 }
 
@@ -58,18 +63,3 @@ export function filterTasks<T extends TaskCardData>(
   });
 }
 
-export function uniqueDepartments(
-  tasks: TaskCardData[]
-): Array<{ id: string; name: string }> {
-  const map = new Map<string, string>();
-  for (const t of tasks) {
-    const d = t.departmentId as
-      | { _id?: string; name?: string }
-      | null
-      | undefined;
-    if (d?._id && d.name) map.set(String(d._id), d.name);
-  }
-  return Array.from(map.entries())
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name, "ar"));
-}
