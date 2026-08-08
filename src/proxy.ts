@@ -16,7 +16,10 @@ export default withAuth(
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
     if (
-      (path.startsWith("/track") || path.startsWith("/employee-review")) &&
+      (path.startsWith("/track") ||
+        path.startsWith("/employee-review") ||
+        path.startsWith("/departments") ||
+        path.startsWith("/settings")) &&
       role &&
       role !== "ceo"
     ) {
@@ -52,6 +55,7 @@ export const config = {
     "/suppliers/:path*",
     "/documents/:path*",
     "/team/:path*",
+    "/departments/:path*",
     "/settings/:path*",
     "/account/:path*",
     "/api/((?!auth).*)",

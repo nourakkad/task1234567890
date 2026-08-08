@@ -19,6 +19,11 @@ const LINKS: Array<{
   },
   { href: "/tasks/new", label: "إسناد مهمة", roles: ["ceo", "manager"] },
   {
+    href: "/departments",
+    label: "إدارة الأقسام",
+    roles: ["ceo"],
+  },
+  {
     href: "/team",
     label: "إدارة الفريق",
     roles: ["ceo", "manager"],
@@ -70,6 +75,7 @@ export function Sidebar() {
             link.href === "/my-tasks" ||
             link.href === "/tasks/new" ||
             link.href === "/team" ||
+            link.href === "/departments" ||
             link.href === "/account"
               ? pathname === link.href || pathname.startsWith(`${link.href}/`)
               : pathname.startsWith(link.href);
