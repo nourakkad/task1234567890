@@ -17,6 +17,34 @@ export async function GET() {
   }
 }
 
+export async function POST(request: Request) {
+  try {
+    const user = await requireSessionUser();
+    if (user.role !== "ceo") {
+      return jsonError("فقط المدير التنفيذي يضيف الأقسام", 403);
+    }
+
+    await connectDB();
+    const body = await request.json();
+    const name = String(body.name || "").trim();
+
+    if (!name || name.length < 2) {
+      return jsonError("اسم القسم مطلوب");
+    }
+    if (name.length > 80) {
+      return jsonError("اسم القسم طويل جدًا");
+    }
+
+    const exists = await Department.findOne({ name });
+    if (exists) return jsonError("يوجد قسم بنفس الاسم");
+
+    const dept = await Department.create({ name, managerId: null });
+    return jsonOk(dept, 201);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
 export async function PATCH(request: Request) {
   try {
     const user = await requireSessionUser();
@@ -31,7 +59,16 @@ export async function PATCH(request: Request) {
     const dept = await Department.findById(body.id);
     if (!dept) return jsonError("القسم غير موجود", 404);
 
-    if (body.name) dept.name = body.name;
+    if (body.name) {
+      const name = String(body.name).trim();
+      if (name.length < 2) return jsonError("اسم القسم قصير جدًا");
+      const clash = await Department.findOne({
+        name,
+        _id: { $ne: dept._id },
+      });
+      if (clash) return jsonError("يوجد قسم بنفس الاسم");
+      dept.name = name;
+    }
     if (body.managerId !== undefined) dept.managerId = body.managerId;
     await dept.save();
 

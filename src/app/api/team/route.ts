@@ -73,11 +73,34 @@ export async function POST(request: Request) {
       if (createRole !== "manager") {
         return jsonError("المدير التنفيذي يمكنه إضافة مدراء فقط", 403);
       }
-      if (!departmentId) {
-        return jsonError("يجب اختيار قسم للمدير");
+
+      const newDepartmentName = String(body.newDepartmentName || "").trim();
+
+      if (newDepartmentName) {
+        if (newDepartmentName.length < 2) {
+          return jsonError("اسم القسم قصير جدًا");
+        }
+        if (newDepartmentName.length > 80) {
+          return jsonError("اسم القسم طويل جدًا");
+        }
+        const existingDept = await Department.findOne({
+          name: newDepartmentName,
+        });
+        if (existingDept) {
+          return jsonError("يوجد قسم بنفس الاسم — اختره من القائمة");
+        }
+        const createdDept = await Department.create({
+          name: newDepartmentName,
+          managerId: null,
+        });
+        departmentId = createdDept._id;
+      } else if (departmentId) {
+        const dept = await Department.findById(departmentId);
+        if (!dept) return jsonError("القسم غير موجود");
+      } else {
+        return jsonError("اختر قسمًا موجودًا أو أنشئ قسمًا جديدًا");
       }
-      const dept = await Department.findById(departmentId);
-      if (!dept) return jsonError("القسم غير موجود");
+
       managerId = null;
     } else if (user.role === "manager") {
       // Managers add employees only
