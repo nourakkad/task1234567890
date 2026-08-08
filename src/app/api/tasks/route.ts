@@ -87,7 +87,20 @@ export async function GET(request: Request) {
       };
     }
 
-    if (status) Object.assign(filter, { status });
+    // Combine status with existing filters safely (works with $or)
+    if (status) {
+      filter = { $and: [filter, { status }] };
+    }
+
+    const departmentId = searchParams.get("departmentId");
+    if (departmentId) {
+      if (!Types.ObjectId.isValid(departmentId)) {
+        return jsonError("معرّف القسم غير صالح", 400);
+      }
+      filter = {
+        $and: [filter, { departmentId: new Types.ObjectId(departmentId) }],
+      };
+    }
 
     const tasks = await Task.find(filter)
       .populate("ownerId", "name email role")

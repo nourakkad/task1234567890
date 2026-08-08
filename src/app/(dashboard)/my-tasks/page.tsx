@@ -4,8 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { TaskCard, type TaskCardData } from "@/components/tasks/TaskCard";
-import { TASK_STATUSES } from "@/constants/lookups";
+import { TaskFilters } from "@/components/tasks/TaskFilters";
 import { apiGet } from "@/lib/client";
+import {
+  EMPTY_TASK_FILTERS,
+  filterTasks,
+  type TaskFilterState,
+} from "@/lib/taskFilters";
 
 interface MyTask extends TaskCardData {
   nextAction?: string;
@@ -16,8 +21,7 @@ interface MyTask extends TaskCardData {
 export default function MyTasksPage() {
   const { data: session, status: authStatus } = useSession();
   const [tasks, setTasks] = useState<MyTask[]>([]);
-  const [status, setStatus] = useState("");
-  const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState<TaskFilterState>(EMPTY_TASK_FILTERS);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -30,26 +34,17 @@ export default function MyTasksPage() {
     }
 
     setLoading(true);
-    const qs = new URLSearchParams({ fromManager: "1" });
-    if (status) qs.set("status", status);
-
-    apiGet<MyTask[]>(`/api/tasks?${qs.toString()}`)
+    setError("");
+    apiGet<MyTask[]>("/api/tasks?fromManager=1")
       .then(setTasks)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [authStatus, session?.user?.role, status]);
+  }, [authStatus, session?.user?.role]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return tasks;
-    return tasks.filter((t) =>
-      [t.taskNo, t.name, t.nextAction, t.status, t.assignedById?.name]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
-    );
-  }, [tasks, query]);
+  const filtered = useMemo(
+    () => filterTasks(tasks, filters),
+    [tasks, filters]
+  );
 
   if (authStatus === "loading") {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;
@@ -70,35 +65,25 @@ export default function MyTasksPage() {
         subtitle="المهام المسندة إليك من المدير — نفّذ الأمر وأضف التحديثات"
       />
 
-      <div className="mb-5 flex flex-wrap gap-3">
-        <div className="field min-w-64 flex-1">
-          <label>بحث</label>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="رقم المهمة، الأمر..."
-          />
-        </div>
-        <div className="field min-w-52">
-          <label>تصفية بالحالة</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">الكل</option>
-            {TASK_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <TaskFilters
+        value={filters}
+        onChange={setFilters}
+        searchPlaceholder="رقم المهمة، الأمر..."
+      />
 
       {error ? <p className="mb-3 text-[var(--danger)]">{error}</p> : null}
+
+      {!loading && !error ? (
+        <p className="mb-3 text-sm text-[var(--muted)]">
+          عرض {filtered.length} من {tasks.length} مهمة
+        </p>
+      ) : null}
 
       {loading ? (
         <p className="text-[var(--muted)]">جارٍ التحميل...</p>
       ) : filtered.length === 0 ? (
         <div className="card p-8 text-center text-[var(--muted)]">
-          لا توجد مهام مسندة إليك حاليًا
+          لا توجد مهام مطابقة للتصفية
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

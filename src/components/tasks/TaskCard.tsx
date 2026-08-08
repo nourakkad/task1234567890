@@ -26,8 +26,8 @@ export interface TaskCardData {
   assignedDate?: string;
   managementDecision?: string;
   managerApproval?: string;
-  ownerId?: { name?: string; role?: string } | null;
-  departmentId?: { name?: string } | null;
+  ownerId?: { _id?: string; name?: string; role?: string } | null;
+  departmentId?: { _id?: string; name?: string } | null;
   lastMessage?: TaskLastMessage | null;
 }
 

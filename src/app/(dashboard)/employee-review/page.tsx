@@ -4,8 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { TaskCard, type TaskCardData } from "@/components/tasks/TaskCard";
-import { TASK_STATUSES } from "@/constants/lookups";
+import { TaskFilters } from "@/components/tasks/TaskFilters";
 import { apiGet } from "@/lib/client";
+import {
+  EMPTY_TASK_FILTERS,
+  filterTasks,
+  uniqueDepartments,
+  type TaskFilterState,
+} from "@/lib/taskFilters";
 
 interface EmployeeTask extends TaskCardData {
   assignedById?: { name?: string; role?: string } | null;
@@ -14,9 +20,7 @@ interface EmployeeTask extends TaskCardData {
 export default function EmployeeReviewPage() {
   const { data: session, status: authStatus } = useSession();
   const [tasks, setTasks] = useState<EmployeeTask[]>([]);
-  const [status, setStatus] = useState("");
-  const [query, setQuery] = useState("");
-  const [department, setDepartment] = useState("");
+  const [filters, setFilters] = useState<TaskFilterState>(EMPTY_TASK_FILTERS);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -29,44 +33,18 @@ export default function EmployeeReviewPage() {
     }
 
     setLoading(true);
-    const qs = new URLSearchParams({ employeeTasks: "1" });
-    if (status) qs.set("status", status);
-
-    apiGet<EmployeeTask[]>(`/api/tasks?${qs.toString()}`)
+    setError("");
+    apiGet<EmployeeTask[]>("/api/tasks?employeeTasks=1")
       .then(setTasks)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [authStatus, session?.user?.role, status]);
+  }, [authStatus, session?.user?.role]);
 
-  const departments = useMemo(() => {
-    const names = new Set<string>();
-    tasks.forEach((t) => {
-      if (t.departmentId?.name) names.add(t.departmentId.name);
-    });
-    return Array.from(names).sort();
-  }, [tasks]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return tasks.filter((t) => {
-      if (department && t.departmentId?.name !== department) return false;
-      if (!q) return true;
-      const hay = [
-        t.taskNo,
-        t.name,
-        t.ownerId?.name,
-        t.departmentId?.name,
-        t.assignedById?.name,
-        t.nextAction,
-        t.lastMessage?.text,
-        t.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }, [tasks, query, department]);
+  const departments = useMemo(() => uniqueDepartments(tasks), [tasks]);
+  const filtered = useMemo(
+    () => filterTasks(tasks, filters),
+    [tasks, filters]
+  );
 
   if (authStatus === "loading") {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;
@@ -87,49 +65,27 @@ export default function EmployeeReviewPage() {
         subtitle="عرض ومراجعة جميع مهام الموظفين عبر الأقسام"
       />
 
-      <div className="mb-5 flex flex-wrap gap-3">
-        <div className="field min-w-64 flex-1">
-          <label>بحث</label>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="رقم المهمة، الموظف، القسم، الرسالة..."
-          />
-        </div>
-        <div className="field min-w-44">
-          <label>القسم</label>
-          <select
-            value={department}
-            onChange={(e) => setDepartment(e.target.value)}
-          >
-            <option value="">كل الأقسام</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field min-w-44">
-          <label>الحالة</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">الكل</option>
-            {TASK_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <TaskFilters
+        value={filters}
+        onChange={setFilters}
+        departments={departments}
+        showDepartment
+        searchPlaceholder="رقم المهمة، الموظف، القسم، الرسالة..."
+      />
 
       {error ? <p className="mb-3 text-[var(--danger)]">{error}</p> : null}
+
+      {!loading && !error ? (
+        <p className="mb-3 text-sm text-[var(--muted)]">
+          عرض {filtered.length} من {tasks.length} مهمة
+        </p>
+      ) : null}
 
       {loading ? (
         <p className="text-[var(--muted)]">جارٍ تحميل مهام الموظفين...</p>
       ) : filtered.length === 0 ? (
         <div className="card p-8 text-center text-[var(--muted)]">
-          لا توجد مهام موظفين مطابقة
+          لا توجد مهام موظفين مطابقة للتصفية
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
