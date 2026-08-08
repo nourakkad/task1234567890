@@ -22,6 +22,7 @@ if (process.env.NODE_ENV === "production") {
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  // App is session/API driven — avoid stale static shells
   async headers() {
     return [
       {

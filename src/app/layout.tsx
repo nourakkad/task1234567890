@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cairo } from "next/font/google";
 import { Providers } from "@/components/Providers";
 import "./globals.css";
@@ -9,9 +9,19 @@ const cairo = Cairo({
   weight: ["400", "500", "600", "700"],
 });
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "إدارة المهام",
   description: "نظام إدارة المهام بين الإدارة والمدراء والموظفين",
+  applicationName: "إدارة المهام",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0f5c4c",
 };
 
 export default function RootLayout({

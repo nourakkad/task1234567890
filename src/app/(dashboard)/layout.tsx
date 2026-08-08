@@ -1,16 +1,12 @@
-import { Sidebar } from "@/components/Sidebar";
+import { AppShell } from "@/components/AppShell";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className="min-h-screen">
-      <Sidebar />
-      <main className="min-h-screen ms-64 box-border p-6 md:p-8">
-        {children}
-      </main>
-    </div>
-  );
+  return <AppShell>{children}</AppShell>;
 }

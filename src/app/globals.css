@@ -210,3 +210,42 @@ table.data tr:hover td {
   border-color: var(--line);
   background: #f7f5f0;
 }
+
+.menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.menu-toggle:hover {
+  background: var(--brand-soft);
+}
+
+/* Mobile-friendly tables & forms */
+@media (max-width: 1023px) {
+  table.data {
+    min-width: 560px;
+  }
+
+  .field input,
+  .field select,
+  .field textarea,
+  .btn {
+    min-height: 2.75rem;
+  }
+}
+
+@media (max-width: 640px) {
+  h2 {
+    font-size: 1.35rem !important;
+    line-height: 1.3;
+  }
+}
