@@ -1,36 +1,122 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Alhadara Procurement Task ERP
 
-## Getting Started
+Arabic-first RTL web app for managing procurement tasks across three layers:
 
-First, run the development server:
+**CEO → 5 Managers → Employees**
+
+Built from the Excel workbook «نظام متابعة مهام المشتريات» with full modules for tasks, daily updates, suppliers, and samples/documents.
+
+## Stack
+
+- Next.js (App Router) + TypeScript + Tailwind CSS
+- MongoDB + Mongoose
+- NextAuth (credentials / JWT)
+- Deploy target: **Netlify** (+ MongoDB Atlas)
+
+## Setup (local)
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Start MongoDB (example local data folder):
+
+```bash
+mongod --dbpath ./.data/mongo --port 27017 --bind_ip 127.0.0.1
+```
+
+3. Copy env file:
+
+```bash
+cp .env.example .env.local
+```
+
+Generate a secret:
+
+```bash
+openssl rand -base64 32
+```
+
+Example `.env.local`:
+
+```bash
+MONGODB_URI=mongodb://127.0.0.1:27017/alhadara_tasks
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=<openssl rand -base64 32>
+NEXT_PUBLIC_ENABLE_DEMO_LOGIN=true
+SEED_PASSWORD=password123
+```
+
+4. Seed demo data:
+
+```bash
+npm run seed
+```
+
+5. Start the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Demo logins (local / seed only)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Password for seeded users: value of `SEED_PASSWORD` (default `password123`)
 
-## Learn More
+| Role | Email |
+|------|-------|
+| CEO | ceo@alhadara.com |
+| Procurement Manager | procurement@alhadara.com |
+| Employee (Iris) | iris@alhadara.com |
 
-To learn more about Next.js, take a look at the following resources:
+Demo login buttons are **hidden in production** unless `NEXT_PUBLIC_ENABLE_DEMO_LOGIN=true`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploy on Netlify
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Create a **MongoDB Atlas** cluster and database user. Allow Netlify IPs (or `0.0.0.0/0` if you accept that risk) and copy the `mongodb+srv://...` URI.
+2. Push this repo to GitHub/GitLab/Bitbucket.
+3. In Netlify: **Add new site → Import from Git**.
+4. Build settings (auto-detected for Next.js; also in `netlify.toml`):
+   - Build command: `npm run build`
+   - Node: `20` (via `.node-version` / `NODE_VERSION`)
+5. Set **environment variables** in Netlify (Site settings → Environment variables):
 
-## Deploy on Vercel
+| Variable | Value |
+|----------|--------|
+| `MONGODB_URI` | Atlas connection string |
+| `NEXTAUTH_URL` | `https://YOUR-SITE.netlify.app` (custom domain later) |
+| `NEXTAUTH_SECRET` | `openssl rand -base64 32` output (32+ chars, not a placeholder) |
+| `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` | `false` |
+| `NETLIFY_NEXT_SKEW_PROTECTION` | `true` (already in `netlify.toml`) |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+6. Seed Atlas **from your machine** (never from Netlify build):
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+MONGODB_URI="mongodb+srv://..." SEED_PASSWORD="StrongPass123" npm run seed
+```
+
+7. Deploy. Change all seeded passwords after first login in production.
+
+Netlify’s Next.js OpenNext adapter is applied automatically — do **not** pin `@netlify/plugin-nextjs` unless you have a reason.
+
+## Security notes
+
+- APIs require a valid session; middleware also guards `/api/*` (except `/api/auth`).
+- Production refuses localhost MongoDB and weak/missing `NEXTAUTH_SECRET`.
+- Sessions: JWT, 8h max age, secure cookies in production, periodic active-user refresh.
+- New user passwords: min 10 chars, letters + numbers; bcrypt cost 12.
+- Security headers: HSTS, `X-Frame-Options: DENY`, `nosniff`, referrer + permissions policies.
+- Seed script refuses to run when `NETLIFY=true` / production context.
+
+## Modules
+
+- لوحة المتابعة — KPIs + tasks needing attention
+- سجل المهام — create/assign/track tasks (`PUR-###`)
+- التحديث اليومي — append-only daily logs (`UPD-###`)
+- الموردون — supplier comparison per task
+- العينات والمستندات — samples & documents (`DOC/SMP-###`)
+- الفريق / الأقسام — org hierarchy management

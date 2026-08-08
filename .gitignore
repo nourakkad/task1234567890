@@ -23,6 +23,10 @@
 # misc
 .DS_Store
 *.pem
+.data/
+
+# local mongodb data
+/.data/
 
 # debug
 npm-debug.log*
@@ -33,8 +37,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# vercel
+# vercel / netlify
 .vercel
+.netlify
 
 # typescript
 *.tsbuildinfo
