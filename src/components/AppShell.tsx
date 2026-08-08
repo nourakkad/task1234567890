@@ -152,7 +152,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="min-h-screen box-border px-4 pb-8 pt-[4.5rem] sm:px-6 lg:ms-64 lg:p-8 lg:pt-8">
+      <main className="min-h-screen max-w-[100vw] box-border overflow-x-hidden px-4 pb-8 pt-[4.5rem] sm:px-6 lg:ms-64 lg:max-w-none lg:p-8 lg:pt-8">
         {children}
       </main>
     </div>
