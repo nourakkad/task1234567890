@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
 
@@ -35,23 +36,30 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const role = session?.user?.role;
 
+  const load = useCallback(async () => {
+    const res = await apiGet<DashboardData>("/api/dashboard");
+    if (res.redirectTo) {
+      router.replace(res.redirectTo);
+      return;
+    }
+    setData(res);
+    setError("");
+  }, [router]);
+
   useEffect(() => {
     if (authStatus === "loading") return;
     if (role === "employee") {
       router.replace("/my-tasks");
       return;
     }
+    load().catch((e) => setError(e.message));
+  }, [authStatus, role, router, load]);
 
-    apiGet<DashboardData>("/api/dashboard")
-      .then((res) => {
-        if (res.redirectTo) {
-          router.replace(res.redirectTo);
-          return;
-        }
-        setData(res);
-      })
-      .catch((e) => setError(e.message));
-  }, [authStatus, role, router]);
+  useAutoRefresh(() => load().catch(() => undefined), {
+    enabled:
+      authStatus === "authenticated" &&
+      (role === "ceo" || role === "manager"),
+  });
 
   if (authStatus === "loading" || role === "employee") {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;

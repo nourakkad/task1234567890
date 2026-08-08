@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import { TimelineList } from "@/components/tasks/TimelineList";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
 
@@ -99,6 +100,10 @@ export default function ManagerTaskDetailPage() {
       setUpdates([]);
     }
   }, [params.id]);
+
+  useAutoRefresh(() => load().catch(() => undefined), {
+    enabled: authStatus === "authenticated" && session?.user?.role === "manager",
+  });
 
   useEffect(() => {
     if (authStatus === "loading") return;

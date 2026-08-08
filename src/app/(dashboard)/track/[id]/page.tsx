@@ -14,6 +14,7 @@ import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import { TimelineList } from "@/components/tasks/TimelineList";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
 
@@ -95,6 +96,10 @@ function TrackDetailInner() {
   useEffect(() => {
     load().catch((e) => setError(e.message));
   }, [load]);
+
+  useAutoRefresh(() => load().catch(() => undefined), {
+    enabled: Boolean(params.id),
+  });
 
   const closed = task?.status === "مكتملة" || task?.status === "ملغاة";
 

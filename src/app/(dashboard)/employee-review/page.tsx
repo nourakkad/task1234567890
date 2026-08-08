@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { TaskCard, type TaskCardData } from "@/components/tasks/TaskCard";
 import { TaskFilters } from "@/components/tasks/TaskFilters";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet } from "@/lib/client";
 import {
   EMPTY_TASK_FILTERS,
@@ -22,22 +23,32 @@ export default function EmployeeReviewPage() {
   const [filters, setFilters] = useState<TaskFilterState>(EMPTY_TASK_FILTERS);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const ready = authStatus === "authenticated" && session?.user?.role === "ceo";
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const data = await apiGet<EmployeeTask[]>("/api/tasks?employeeTasks=1");
+      setTasks(data);
+      setError("");
+    } catch (e) {
+      if (!silent) setError(e instanceof Error ? e.message : "فشل التحميل");
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (authStatus === "loading") return;
-    if (session?.user?.role !== "ceo") {
+    if (!ready) {
       setError("هذه الصفحة للمدير التنفيذي فقط");
       setLoading(false);
       return;
     }
+    load(false);
+  }, [authStatus, ready, load]);
 
-    setLoading(true);
-    setError("");
-    apiGet<EmployeeTask[]>("/api/tasks?employeeTasks=1")
-      .then(setTasks)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [authStatus, session?.user?.role]);
+  useAutoRefresh(() => load(true), { enabled: ready });
 
   const filtered = useMemo(
     () => filterTasks(tasks, filters),
