@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Cairo } from "next/font/google";
 import { Providers } from "@/components/Providers";
+import { PwaRegister } from "@/components/PwaRegister";
 import "./globals.css";
 
 const cairo = Cairo({
@@ -16,10 +17,17 @@ export const metadata: Metadata = {
   title: "إدارة المهام | الحضارة",
   description: "نظام إدارة المهام بين الإدارة والمدراء والموظفين",
   applicationName: "إدارة المهام",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "إدارة المهام",
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
       { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/alhadara-logo.png", type: "image/png" },
     ],
     apple: [{ url: "/apple-icon.png", type: "image/png" }],
@@ -42,6 +50,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl" className={`${cairo.variable} h-full`}>
       <body className="min-h-full font-sans antialiased">
         <Providers>{children}</Providers>
+        <PwaRegister />
       </body>
     </html>
   );
