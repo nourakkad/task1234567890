@@ -13,15 +13,24 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "إدارة المهام",
+  title: "إدارة المهام | الحضارة",
   description: "نظام إدارة المهام بين الإدارة والمدراء والموظفين",
   applicationName: "إدارة المهام",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/alhadara-logo.png", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png", type: "image/png" }],
+    shortcut: ["/favicon.ico"],
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0f5c4c",
+  themeColor: "#16325c",
 };
 
 export default function RootLayout({

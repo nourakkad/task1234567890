@@ -186,8 +186,8 @@ export default function TeamTaskDetailPage() {
               />
             ) : null}
           </div>
-          <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-4">
-            <div className="text-xs font-semibold text-teal-800">
+          <div className="rounded-xl border border-[var(--accent)]/40 bg-[var(--accent-soft)] p-4">
+            <div className="text-xs font-semibold text-[var(--brand-deep)]">
               أمرك الحالي للموظف
             </div>
             <p className="mt-2 text-sm font-medium">

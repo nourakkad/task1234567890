@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -60,10 +61,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <CloseIcon />
           </span>
         </button>
-        <div className="min-w-0 flex-1 text-center">
-          <div className="truncate text-sm font-bold">نظام إدارة المهام</div>
-          <div className="truncate text-xs text-[var(--muted)]">
-            {data?.user?.name || ""}
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
+          <Image
+            src="/alhadara-logo.png"
+            alt="الحضارة"
+            width={32}
+            height={32}
+            className="h-8 w-8 rounded-full bg-white object-contain"
+            priority
+          />
+          <div className="min-w-0 text-start">
+            <div className="truncate text-sm font-bold">نظام إدارة المهام</div>
+            <div className="truncate text-xs text-[var(--muted)]">
+              {data?.user?.name || ""}
+            </div>
           </div>
         </div>
         <Link
@@ -92,13 +103,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }`}
       >
         <div className="flex shrink-0 items-start justify-between gap-2 border-b border-white/10 px-5 py-5">
-          <div>
-            <div className="text-xs tracking-[0.2em] text-emerald-200/80">
-              إدارة المهام
+          <div className="flex min-w-0 items-center gap-3">
+            <Image
+              src="/alhadara-logo.png"
+              alt="شعار الحضارة"
+              width={56}
+              height={56}
+              className="h-14 w-14 shrink-0 rounded-full bg-white object-contain"
+              priority
+            />
+            <div className="min-w-0">
+              <div className="text-xs tracking-[0.2em] text-[var(--accent)]">
+                ALHDARA
+              </div>
+              <h1 className="mt-1 text-lg font-bold leading-tight">
+                نظام إدارة المهام
+              </h1>
             </div>
-            <h1 className="mt-2 text-xl font-bold leading-tight">
-              نظام إدارة المهام
-            </h1>
           </div>
           <button
             type="button"
@@ -120,8 +141,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 onClick={() => setOpen(false)}
                 className={`rounded-xl px-3 py-2.5 text-sm transition ${
                   active
-                    ? "bg-white/12 font-semibold text-white"
-                    : "text-emerald-50/80 hover:bg-white/8"
+                    ? "bg-[var(--accent)]/20 font-semibold text-white"
+                    : "text-[var(--sidebar-muted)] hover:bg-white/8 hover:text-white"
                 }`}
               >
                 {link.label}
@@ -132,7 +153,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="shrink-0 border-t border-white/10 p-4">
           <div className="text-sm font-semibold">{data?.user?.name}</div>
-          <div className="mt-0.5 text-xs text-emerald-100/70">
+          <div className="mt-0.5 text-xs text-[var(--sidebar-muted)]">
             {role ? ROLE_LABELS[role] : ""}
           </div>
           <Link

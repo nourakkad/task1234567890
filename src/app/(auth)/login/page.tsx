@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Image from "next/image";
 import { getSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { PasswordField } from "@/components/PasswordField";
@@ -50,11 +51,19 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center px-4">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,#d7e8e1,transparent_35%),radial-gradient(circle_at_80%_0%,#f0e0cf,transparent_30%),linear-gradient(160deg,#0f5c4c,#16382f_45%,#1c2421)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,#2ebab855,transparent_35%),radial-gradient(circle_at_80%_0%,#aab7c455,transparent_30%),linear-gradient(160deg,#16325c,#163849_50%,#0f2038)]" />
       <div className="relative w-full max-w-md card p-8 shadow-xl">
         <div className="mb-6 text-center">
-          <div className="text-xs tracking-[0.25em] text-[var(--brand)]">
-            إدارة المهام
+          <Image
+            src="/alhadara-logo.png"
+            alt="شعار الحضارة"
+            width={96}
+            height={96}
+            className="mx-auto h-24 w-24 rounded-full bg-black object-contain"
+            priority
+          />
+          <div className="mt-3 text-xs tracking-[0.25em] text-[var(--brand)]">
+            ALHDARA
           </div>
           <h1 className="mt-2 text-2xl font-bold">تسجيل الدخول</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">

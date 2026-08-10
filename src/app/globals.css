@@ -1,19 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f3f1ec;
-  --bg-elevated: #fffcf7;
-  --ink: #1c2421;
-  --muted: #5f6b66;
-  --line: #d7d2c8;
-  --brand: #0f5c4c;
-  --brand-soft: #e3f0ec;
-  --accent: #c45c26;
+  /* Brand palette */
+  --brand: #16325c;
+  --brand-deep: #163849;
+  --accent: #2ebab8;
+  --accent-soft: #d8f4f3;
+  --neutral: #aab7c4;
+
+  --bg: #f4f6f9;
+  --bg-elevated: #ffffff;
+  --ink: #16325c;
+  --muted: #5c6b7a;
+  --line: #d5dde5;
+  --brand-soft: #e8eef5;
   --warn: #b45309;
   --danger: #b42318;
-  --ok: #0f766e;
-  --sidebar: #102821;
-  --sidebar-ink: #e8f2ee;
+  --ok: #2ebab8;
+  --sidebar: #16325c;
+  --sidebar-ink: #eef2f6;
+  --sidebar-muted: #aab7c4;
 }
 
 @theme inline {
@@ -30,8 +36,8 @@
 
 body {
   background:
-    radial-gradient(circle at 10% 0%, #e8efe9 0%, transparent 40%),
-    radial-gradient(circle at 90% 10%, #efe6d8 0%, transparent 35%),
+    radial-gradient(circle at 12% 0%, #d8e4f2 0%, transparent 42%),
+    radial-gradient(circle at 88% 8%, #d8f4f3 0%, transparent 36%),
     var(--bg);
   color: var(--ink);
   min-height: 100vh;
@@ -73,7 +79,7 @@ button {
 }
 
 .btn-primary:hover {
-  filter: brightness(1.08);
+  background: var(--brand-deep);
 }
 
 .btn-secondary {
@@ -84,6 +90,7 @@ button {
 
 .btn-secondary:hover {
   background: var(--brand-soft);
+  border-color: var(--neutral);
 }
 
 .btn-danger {
@@ -116,8 +123,8 @@ button {
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(15, 92, 76, 0.12);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(46, 186, 184, 0.18);
 }
 
 .table-wrap {
@@ -148,11 +155,11 @@ table.data th {
   font-size: 0.8rem;
   color: var(--muted);
   font-weight: 600;
-  background: #faf7f1;
+  background: #eef2f6;
 }
 
 table.data tr:hover td {
-  background: #fbf8f2;
+  background: #f7fafc;
 }
 
 .badge {
@@ -165,9 +172,9 @@ table.data tr:hover td {
 }
 
 .badge-green {
-  background: #ecfdf5;
-  color: #047857;
-  border-color: #a7f3d0;
+  background: #e8faf9;
+  color: #0f7a78;
+  border-color: #9edfdd;
 }
 
 .badge-amber {
@@ -183,38 +190,38 @@ table.data tr:hover td {
 }
 
 .badge-slate {
-  background: #f1f5f9;
-  color: #334155;
-  border-color: #cbd5e1;
+  background: #eef2f6;
+  color: #163849;
+  border-color: #aab7c4;
 }
 
 .badge-teal {
-  background: var(--brand-soft);
-  color: var(--brand);
-  border-color: #9ec9bb;
+  background: var(--accent-soft);
+  color: #127875;
+  border-color: #7fd4d2;
 }
 
 .badge-blue {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-color: #93c5fd;
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: #aab7c4;
 }
 
 /* Timeline / last-message colors by sender */
 .msg-ceo {
-  border-color: #f6d28a;
-  background: #fff8e8;
+  border-color: #7fd4d2;
+  background: #e8faf9;
 }
 
 .msg-manager {
-  border-color: #93c5fd;
-  background: #eef5ff;
-  color: #1e3a5f;
+  border-color: #aab7c4;
+  background: #eef2f6;
+  color: #16325c;
 }
 
 .msg-employee {
   border-color: var(--line);
-  background: #f7f5f0;
+  background: #f7f9fb;
 }
 
 .menu-toggle {
