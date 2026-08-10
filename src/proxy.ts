@@ -11,15 +11,31 @@ export default withAuth(
     const role = req.nextauth.token?.role as string | undefined;
     const path = req.nextUrl.pathname;
 
-    // Soft role gates at the edge (APIs still enforce permissions)
+    if (path.startsWith("/hr") && role && role !== "hr") {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+
+    if (
+      role === "hr" &&
+      !path.startsWith("/hr") &&
+      !path.startsWith("/account") &&
+      !path.startsWith("/api/")
+    ) {
+      if (
+        path.startsWith("/dashboard") ||
+        path.startsWith("/team") ||
+        path.startsWith("/departments") ||
+        path.startsWith("/tasks") ||
+        path.startsWith("/track")
+      ) {
+        return NextResponse.redirect(new URL("/hr", req.url));
+      }
+    }
+
     if (path.startsWith("/my-tasks") && role && role !== "employee") {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
-    if (
-      path.startsWith("/ceo-tasks") &&
-      role &&
-      role !== "ceo"
-    ) {
+    if (path.startsWith("/ceo-tasks") && role && role !== "ceo") {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
     if (
@@ -30,11 +46,7 @@ export default withAuth(
     ) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
-    if (
-      (path.startsWith("/departments") || path.startsWith("/settings")) &&
-      role &&
-      role !== "ceo"
-    ) {
+    if (path.startsWith("/settings") && role && role !== "ceo" && role !== "hr") {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
@@ -57,6 +69,7 @@ export default withAuth(
 export const config = {
   matcher: [
     "/dashboard/:path*",
+    "/hr/:path*",
     "/track/:path*",
     "/employee-review/:path*",
     "/manager-tasks/:path*",

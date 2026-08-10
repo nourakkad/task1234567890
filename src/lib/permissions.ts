@@ -17,8 +17,23 @@ export function isLeadership(role: UserRole) {
   return role === "general_manager" || role === "ceo";
 }
 
+/** HR owns creating/editing managers, employees, and departments */
+export function canManageDirectory(role: UserRole) {
+  return role === "hr";
+}
+
+/** CEO owns creating/editing/deleting HR accounts */
+export function canManageHrAccounts(role: UserRole) {
+  return role === "ceo";
+}
+
+/** @deprecated use canManageDirectory — kept for older call sites */
 export function canManageTeam(role: UserRole) {
-  return role === "ceo" || role === "manager";
+  return canManageDirectory(role);
+}
+
+export function canViewOrgDirectory(role: UserRole) {
+  return role === "hr" || role === "ceo" || role === "manager";
 }
 
 export function canCreateTask(role: UserRole) {
@@ -56,6 +71,11 @@ export function canTrackManagers(role: UserRole) {
 export async function getVisibleTaskFilter(user: SessionUser) {
   // GM and CEO see everything
   if (user.role === "general_manager" || user.role === "ceo") return {};
+
+  // HR only sees tasks assigned to them
+  if (user.role === "hr") {
+    return { ownerId: new Types.ObjectId(user.id) };
+  }
 
   if (user.role === "manager") {
     const employees = await User.find({
@@ -101,7 +121,7 @@ export function canAccessTask(
   const ownerId = refId(task.ownerId);
   const departmentId = refId(task.departmentId);
 
-  if (user.role === "employee") {
+  if (user.role === "employee" || user.role === "hr") {
     return ownerId === user.id;
   }
 
@@ -129,6 +149,9 @@ export function canEditTask(user: SessionUser, task: ITask, teamIds: string[]) {
   if (user.role === "general_manager" || user.role === "ceo") return true;
   if (user.role === "manager") {
     return canAccessTask(user, task, teamIds);
+  }
+  if (user.role === "hr") {
+    return refId(task.ownerId) === user.id;
   }
   return task.ownerId.toString() === user.id;
 }

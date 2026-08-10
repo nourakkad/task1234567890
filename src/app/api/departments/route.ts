@@ -20,8 +20,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const user = await requireSessionUser();
-    if (user.role !== "ceo") {
-      return jsonError("فقط المدير التنفيذي يضيف الأقسام", 403);
+    if (user.role !== "hr") {
+      return jsonError("فقط الموارد البشرية تضيف الأقسام", 403);
     }
 
     await connectDB();
@@ -48,8 +48,8 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const user = await requireSessionUser();
-    if (user.role !== "ceo") {
-      return jsonError("فقط المدير التنفيذي يعدّل الأقسام", 403);
+    if (user.role !== "hr") {
+      return jsonError("فقط الموارد البشرية تعدّل الأقسام", 403);
     }
 
     await connectDB();

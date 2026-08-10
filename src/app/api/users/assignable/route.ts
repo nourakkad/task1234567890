@@ -11,15 +11,16 @@ export async function GET() {
     let filter: Record<string, unknown> = { active: true };
 
     if (user.role === "general_manager") {
-      // GM assigns to CEO and managers
+      // GM assigns to CEO, HR, and managers
       filter = {
         active: true,
-        role: { $in: ["ceo", "manager"] },
+        role: { $in: ["ceo", "hr", "manager"] },
       };
     } else if (user.role === "ceo") {
+      // CEO assigns to HR and managers
       filter = {
         active: true,
-        role: "manager",
+        role: { $in: ["hr", "manager"] },
       };
     } else if (user.role === "manager") {
       filter = {

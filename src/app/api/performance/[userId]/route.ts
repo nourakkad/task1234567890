@@ -11,7 +11,11 @@ type Params = { params: Promise<{ userId: string }> };
 export async function GET(_request: Request, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role !== "ceo" && user.role !== "manager") {
+    if (
+      user.role !== "hr" &&
+      user.role !== "ceo" &&
+      user.role !== "manager"
+    ) {
       return jsonError("غير مصرح بعرض سجل التقييم", 403);
     }
 
@@ -26,9 +30,13 @@ export async function GET(_request: Request, { params }: Params) {
       return jsonError("المستخدم غير موجود", 404);
     }
 
-    if (user.role === "ceo") {
-      if (target.role !== "manager") {
-        return jsonError("المدير التنفيذي يعرض سجل المدراء فقط", 403);
+    if (user.role === "hr") {
+      if (target.role !== "manager" && target.role !== "employee") {
+        return jsonError("الموارد البشرية تعرض سجل المدراء والموظفين فقط", 403);
+      }
+    } else if (user.role === "ceo") {
+      if (target.role !== "manager" && target.role !== "employee") {
+        return jsonError("المدير التنفيذي يعرض سجل المدراء والموظفين فقط", 403);
       }
     } else if (user.role === "manager") {
       if (target.role !== "employee") {

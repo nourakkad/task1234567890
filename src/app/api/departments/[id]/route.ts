@@ -11,8 +11,8 @@ type Params = { params: Promise<{ id: string }> };
 export async function DELETE(_request: Request, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role !== "ceo") {
-      return jsonError("فقط المدير التنفيذي يحذف الأقسام", 403);
+    if (user.role !== "hr") {
+      return jsonError("فقط الموارد البشرية تحذف الأقسام", 403);
     }
 
     await connectDB();

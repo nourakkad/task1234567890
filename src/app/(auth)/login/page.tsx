@@ -15,6 +15,7 @@ const DEMO_ENABLED =
 const DEMO_ACCOUNTS = [
   { label: "المدير العام", email: "gm@alhadara.com" },
   { label: "المدير التنفيذي", email: "ceo@alhadara.com" },
+  { label: "الموارد البشرية", email: "hr@alhadara.com" },
   { label: "مدير المشتريات", email: "procurement@alhadara.com" },
   { label: "موظف (Iris)", email: "iris@alhadara.com" },
 ];
@@ -45,6 +46,7 @@ export default function LoginPage() {
     const session = await getSession();
     const role = session?.user?.role;
     if (role === "employee") router.push("/my-tasks");
+    else if (role === "hr") router.push("/hr");
     else router.push("/dashboard");
     router.refresh();
   }

@@ -32,8 +32,12 @@ export async function GET(request: Request) {
     let filter: Record<string, unknown> = await getVisibleTaskFilter(user);
 
     if (fromCeo || fromLeadership) {
-      // CEO inbox (from GM) or manager inbox (from CEO/GM)
-      if (user.role !== "manager" && user.role !== "ceo") {
+      // CEO / HR / manager inbox from leadership above them
+      if (
+        user.role !== "manager" &&
+        user.role !== "ceo" &&
+        user.role !== "hr"
+      ) {
         return jsonError("غير مصرح", 403);
       }
 
@@ -81,26 +85,26 @@ export async function GET(request: Request) {
     }
 
     if (managerTasks) {
-      // CEO tracks managers only
+      // CEO tracks managers + HR
       if (user.role !== "ceo") {
         return jsonError("غير مصرح", 403);
       }
-      const managers = await User.find({
-        role: "manager",
+      const assignees = await User.find({
+        role: { $in: ["manager", "hr"] },
         active: true,
       }).select("_id");
       filter = {
-        ownerId: { $in: managers.map((m) => m._id) },
+        ownerId: { $in: assignees.map((m) => m._id) },
       };
     }
 
     if (leadershipTasks) {
-      // GM tracks CEO + managers
+      // GM tracks CEO + HR + managers
       if (user.role !== "general_manager") {
         return jsonError("هذه الصفحة للمدير العام فقط", 403);
       }
       const leaders = await User.find({
-        role: { $in: ["ceo", "manager"] },
+        role: { $in: ["ceo", "hr", "manager"] },
         active: true,
       }).select("_id");
       filter = {
@@ -215,9 +219,13 @@ export async function POST(request: Request) {
     if (!owner) return jsonError("المسؤول غير موجود", 404);
 
     if (user.role === "general_manager") {
-      if (owner.role !== "ceo" && owner.role !== "manager") {
+      if (
+        owner.role !== "ceo" &&
+        owner.role !== "hr" &&
+        owner.role !== "manager"
+      ) {
         return jsonError(
-          "المدير العام يسند المهام للمدير التنفيذي والمدراء فقط",
+          "المدير العام يسند المهام للمدير التنفيذي والموارد البشرية والمدراء فقط",
           403
         );
       }
@@ -232,24 +240,32 @@ export async function POST(request: Request) {
           return jsonError("يجب أن تطابق المهمة قسم المدير المختار", 403);
         }
       }
-      // CEO may have no department — optional
+      // CEO / HR may have no department — optional
       if (!body.managementDecision && !body.nextAction) {
         return jsonError("أدخل القرار أو الأمر");
       }
     }
 
     if (user.role === "ceo") {
-      if (owner.role !== "manager") {
-        return jsonError("المدير التنفيذي يسند المهام للمدراء فقط", 403);
+      if (owner.role !== "manager" && owner.role !== "hr") {
+        return jsonError(
+          "المدير التنفيذي يسند المهام للموارد البشرية والمدراء فقط",
+          403
+        );
       }
-      if (!body.departmentId) {
-        return jsonError("الاسم والمسؤول والقسم مطلوبة");
+      if (owner.role === "manager") {
+        if (!body.departmentId) {
+          return jsonError("الاسم والمسؤول والقسم مطلوبة");
+        }
+        if (
+          owner.departmentId &&
+          body.departmentId !== owner.departmentId.toString()
+        ) {
+          return jsonError("يجب أن تطابق المهمة قسم المدير المختار", 403);
+        }
       }
-      if (
-        owner.departmentId &&
-        body.departmentId !== owner.departmentId.toString()
-      ) {
-        return jsonError("يجب أن تطابق المهمة قسم المدير المختار", 403);
+      if (!body.managementDecision && !body.nextAction) {
+        return jsonError("أدخل القرار أو الأمر");
       }
     }
 
@@ -281,6 +297,7 @@ export async function POST(request: Request) {
     } else if (owner.role === "manager" || owner.role === "employee") {
       return jsonError("القسم مطلوب لهذا المسؤول");
     }
+    // ceo / hr: department optional
 
     const taskNo = await nextTaskNo();
     const task = await Task.create({

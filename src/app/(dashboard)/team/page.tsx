@@ -1,50 +1,58 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
+import { PasswordField } from "@/components/PasswordField";
+import { matchesSearch, SearchField } from "@/components/SearchField";
 import { ROLE_LABELS, type UserRole } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
+import { formatScoreAvg } from "@/lib/format";
 
 interface TeamUser {
   _id: string;
   name: string;
   email: string;
   role: UserRole;
-  departmentId?: { name: string };
-  managerId?: { name: string };
+  departmentId?: { name?: string };
+  managerId?: { name?: string };
+  avgScore?: number | null;
+  reviewCount?: number;
 }
 
 interface Department {
   _id: string;
   name: string;
-  managerId?: { _id?: string; name?: string } | null;
+  managerId?: { name?: string } | null;
 }
 
-export default function TeamPage() {
+export default function TeamViewPage() {
   const { data: session, status: authStatus } = useSession();
   const router = useRouter();
   const [users, setUsers] = useState<TeamUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [performanceMonth, setPerformanceMonth] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [deptMode, setDeptMode] = useState<"existing" | "new">("existing");
-  const [selectedDeptId, setSelectedDeptId] = useState("");
-  const [newDeptName, setNewDeptName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [editingHr, setEditingHr] = useState<TeamUser | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [query, setQuery] = useState("");
   const role = session?.user?.role;
 
-  async function load() {
-    const data = await apiGet<{ users: TeamUser[]; departments: Department[] }>(
-      "/api/team"
-    );
+  const load = useCallback(async () => {
+    const data = await apiGet<{
+      users: TeamUser[];
+      departments: Department[];
+      performanceMonth?: string;
+    }>("/api/team");
     setUsers(data.users);
     setDepartments(data.departments);
-    if (data.departments.length === 0) {
-      setDeptMode("new");
-    }
-  }
+    setPerformanceMonth(data.performanceMonth || "");
+  }, []);
 
   useEffect(() => {
     if (authStatus === "loading") return;
@@ -52,301 +60,404 @@ export default function TeamPage() {
       router.replace("/login");
       return;
     }
+    if (role === "hr") {
+      router.replace("/hr");
+      return;
+    }
     if (role !== "ceo" && role !== "manager") {
-      setError("هذه الصفحة للمدير التنفيذي والمدراء فقط");
+      setError("غير مصرح");
       return;
     }
     load().catch((e) => setError(e.message));
-  }, [authStatus, session, role, router]);
+  }, [authStatus, session, role, router, load]);
 
-  async function onCreate(e: FormEvent<HTMLFormElement>) {
+  const hrUsers = useMemo(
+    () =>
+      users.filter(
+        (u) =>
+          u.role === "hr" &&
+          matchesSearch(query, u.name, u.email, ROLE_LABELS[u.role])
+      ),
+    [users, query]
+  );
+  const managers = useMemo(
+    () =>
+      users.filter(
+        (u) =>
+          u.role === "manager" &&
+          matchesSearch(
+            query,
+            u.name,
+            u.email,
+            u.departmentId?.name,
+            ROLE_LABELS[u.role]
+          )
+      ),
+    [users, query]
+  );
+  const employees = useMemo(
+    () =>
+      users.filter(
+        (u) =>
+          u.role === "employee" &&
+          matchesSearch(
+            query,
+            u.name,
+            u.email,
+            u.departmentId?.name,
+            u.managerId?.name,
+            ROLE_LABELS[u.role]
+          )
+      ),
+    [users, query]
+  );
+  const filteredDepartments = useMemo(
+    () =>
+      departments.filter((d) =>
+        matchesSearch(query, d.name, d.managerId?.name)
+      ),
+    [departments, query]
+  );
+
+  async function onCreateHr(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setBusy(true);
     setError("");
     setMessage("");
     const form = new FormData(e.currentTarget);
-    const createRole = role === "ceo" ? "manager" : "employee";
-
-    if (role === "ceo") {
-      if (deptMode === "existing" && !selectedDeptId) {
-        setError("اختر قسمًا موجودًا أو أنشئ قسمًا جديدًا");
-        return;
-      }
-      if (deptMode === "new" && newDeptName.trim().length < 2) {
-        setError("أدخل اسم القسم الجديد");
-        return;
-      }
-    }
-
-    setLoading(true);
     try {
       await apiSend("/api/team", "POST", {
         name: form.get("name"),
         email: form.get("email"),
         password: form.get("password"),
-        role: createRole,
-        ...(role === "ceo"
-          ? deptMode === "new"
-            ? { newDepartmentName: newDeptName.trim() }
-            : { departmentId: selectedDeptId }
-          : {}),
+        role: "hr",
       });
       e.currentTarget.reset();
-      setSelectedDeptId("");
-      setNewDeptName("");
-      setDeptMode(departments.length ? "existing" : "new");
       await load();
-      setMessage(
-        createRole === "manager" ? "تم إضافة المدير والقسم" : "تم إضافة الموظف"
-      );
+      setMessage("تم إضافة حساب الموارد البشرية");
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل الإضافة");
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
-  if (authStatus === "loading") {
+  function openEditHr(u: TeamUser) {
+    setEditingHr(u);
+    setEditName(u.name);
+    setEditEmail(u.email);
+    setEditPassword("");
+    setError("");
+    setMessage("");
+  }
+
+  async function onSaveHr(e: FormEvent) {
+    e.preventDefault();
+    if (!editingHr) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await apiSend(`/api/team/${editingHr._id}`, "PATCH", {
+        name: editName,
+        email: editEmail,
+        ...(editPassword.trim() ? { password: editPassword } : {}),
+      });
+      setEditingHr(null);
+      await load();
+      setMessage("تم تحديث حساب الموارد البشرية");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل التحديث");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onDeleteHr(u: TeamUser) {
+    if (!window.confirm(`حذف حساب الموارد البشرية «${u.name}»؟`)) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await apiSend(`/api/team/${u._id}`, "DELETE");
+      if (editingHr?._id === u._id) setEditingHr(null);
+      await load();
+      setMessage("تم حذف حساب الموارد البشرية");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل الحذف");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (authStatus === "loading" || role === "hr") {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;
   }
 
   if (role !== "ceo" && role !== "manager") {
     return (
-      <div className="card p-6 text-[var(--danger)]">
-        هذه الصفحة للمدير التنفيذي والمدراء فقط
-      </div>
+      <div className="card p-6 text-[var(--danger)]">غير مصرح بعرض هذه الصفحة</div>
     );
   }
 
   const isCeo = role === "ceo";
+  const monthHint = performanceMonth
+    ? ` — متوسط تقييم الشهر (${performanceMonth})`
+    : "";
 
   return (
-    <div className="mx-auto w-full max-w-6xl overflow-x-hidden">
+    <div className="mx-auto w-full max-w-6xl">
       <PageHeader
-        title={isCeo ? "إدارة المدراء" : "إدارة الفريق"}
+        title={isCeo ? "عرض الفريق" : "عرض فريقك"}
         subtitle={
           isCeo
-            ? "أضف مديرًا مع قسم موجود أو قسم جديد"
-            : "أضف موظفين تابعين لقسمك"
+            ? `إدارة الموارد البشرية وعرض المدراء والموظفين${monthHint}`
+            : `موظفو فريقك مع تقييم الأداء الشهري${monthHint}`
         }
       />
-      {error ? (
-        <p className="mb-3 break-words text-[var(--danger)]">{error}</p>
-      ) : null}
+      {error ? <p className="mb-3 text-[var(--danger)]">{error}</p> : null}
       {message ? <p className="mb-3 text-[var(--ok)]">{message}</p> : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        {/* Form first on mobile */}
-        <form
-          onSubmit={onCreate}
-          className="card order-1 space-y-3 p-4 lg:order-2 lg:self-start"
-        >
-          <h3 className="font-semibold">
-            {isCeo ? "إضافة مدير" : "إضافة موظف"}
-          </h3>
-          <div className="field">
-            <label htmlFor="name">الاسم</label>
-            <input id="name" name="name" required autoComplete="name" />
-          </div>
-          <div className="field">
-            <label htmlFor="email">البريد</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              autoComplete="email"
-              className="min-w-0"
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="password">كلمة المرور</label>
-            <input
-              id="password"
+      <SearchField
+        value={query}
+        onChange={setQuery}
+        placeholder="الاسم، البريد، القسم، المدير..."
+      />
+
+      {isCeo ? (
+        <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_320px]">
+          <Section
+            title="الموارد البشرية"
+            empty={
+              query.trim()
+                ? "لا نتائج مطابقة للبحث"
+                : "لا يوجد مستخدمو موارد بشرية"
+            }
+            users={hrUsers}
+            showManager={false}
+            showRating
+            onEdit={openEditHr}
+            onDelete={onDeleteHr}
+            busy={busy}
+          />
+          <form onSubmit={onCreateHr} className="card h-fit space-y-3 p-4">
+            <h3 className="font-semibold">إضافة موارد بشرية</h3>
+            <div className="field">
+              <label>الاسم</label>
+              <input name="name" required minLength={2} />
+            </div>
+            <div className="field">
+              <label>البريد</label>
+              <input name="email" type="email" required />
+            </div>
+            <PasswordField
               name="password"
-              type="password"
+              label="كلمة المرور"
               required
               minLength={10}
               autoComplete="new-password"
-              className="min-w-0"
             />
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              10 أحرف على الأقل، حروف وأرقام
-            </p>
-          </div>
+            <button
+              type="submit"
+              className="btn btn-primary w-full"
+              disabled={busy}
+            >
+              إضافة
+            </button>
+          </form>
+        </div>
+      ) : null}
 
-          {isCeo ? (
-            <div className="space-y-3 rounded-xl border border-[var(--line)] p-3">
-              <div className="text-sm font-semibold">القسم</div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  className={`btn w-full text-sm ${
-                    deptMode === "existing" ? "btn-primary" : "btn-secondary"
-                  }`}
-                  onClick={() => setDeptMode("existing")}
-                  disabled={departments.length === 0}
-                >
-                  قسم موجود
-                </button>
-                <button
-                  type="button"
-                  className={`btn w-full text-sm ${
-                    deptMode === "new" ? "btn-primary" : "btn-secondary"
-                  }`}
-                  onClick={() => setDeptMode("new")}
-                >
-                  قسم جديد
-                </button>
-              </div>
+      {isCeo ? (
+        <Section
+          title="المدراء"
+          empty={query.trim() ? "لا نتائج مطابقة للبحث" : "لا يوجد مدراء"}
+          users={managers}
+          showManager={false}
+          showRating
+        />
+      ) : null}
+      <Section
+        title={isCeo ? "الموظفون" : "موظفو فريقك"}
+        empty={query.trim() ? "لا نتائج مطابقة للبحث" : "لا يوجد موظفون"}
+        users={employees}
+        showManager={isCeo}
+        showRating
+      />
 
-              {deptMode === "existing" ? (
-                <div className="field">
-                  <label htmlFor="departmentId">اختر القسم</label>
-                  <select
-                    id="departmentId"
-                    value={selectedDeptId}
-                    onChange={(e) => setSelectedDeptId(e.target.value)}
-                    required={deptMode === "existing"}
-                    className="min-w-0 max-w-full"
-                  >
-                    <option value="">— اختر —</option>
-                    {departments.map((d) => (
-                      <option key={d._id} value={d._id}>
-                        {d.name}
-                        {d.managerId?.name
-                          ? ` — ${d.managerId.name}`
-                          : " — بدون مدير"}
-                      </option>
-                    ))}
-                  </select>
-                  {departments.length === 0 ? (
-                    <p className="mt-1 text-xs text-[var(--muted)]">
-                      لا توجد أقسام بعد — أنشئ قسمًا جديدًا
-                    </p>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="field">
-                  <label htmlFor="newDepartmentName">اسم القسم الجديد</label>
-                  <input
-                    id="newDepartmentName"
-                    value={newDeptName}
-                    onChange={(e) => setNewDeptName(e.target.value)}
-                    placeholder="مثال: المشتريات"
-                    required={deptMode === "new"}
-                    minLength={2}
-                    maxLength={80}
-                    className="min-w-0"
-                  />
-                </div>
-              )}
-            </div>
+      {isCeo && departments.length > 0 ? (
+        <div className="card mt-4 p-4">
+          <h3 className="mb-3 font-semibold">الأقسام</h3>
+          {filteredDepartments.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">لا نتائج مطابقة للبحث</p>
           ) : (
-            <p className="text-sm text-[var(--muted)]">
-              سيتم ربط الموظف بقسمك وتحت إدارتك تلقائيًا.
-            </p>
+            <ul className="space-y-2 text-sm">
+              {filteredDepartments.map((d) => (
+                <li
+                  key={d._id}
+                  className="flex flex-wrap justify-between gap-2 border-b border-[var(--line)] pb-2 last:border-0"
+                >
+                  <span className="font-medium">{d.name}</span>
+                  <span className="text-[var(--muted)]">
+                    {d.managerId?.name
+                      ? `المدير: ${d.managerId.name}`
+                      : "بدون مدير"}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
+        </div>
+      ) : null}
 
-          <button
-            type="submit"
-            className="btn btn-primary w-full"
-            disabled={loading}
+      {editingHr ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => !busy && setEditingHr(null)}
+        >
+          <form
+            onSubmit={onSaveHr}
+            className="card w-full max-w-md space-y-3 p-5"
+            onClick={(e) => e.stopPropagation()}
           >
-            {loading
-              ? "جارٍ الحفظ..."
-              : isCeo
-                ? "حفظ المدير"
-                : "حفظ الموظف"}
-          </button>
-        </form>
+            <h3 className="text-lg font-semibold">تعديل الموارد البشرية</h3>
+            <div className="field">
+              <label>الاسم</label>
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                required
+                minLength={2}
+              />
+            </div>
+            <div className="field">
+              <label>البريد</label>
+              <input
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                required
+              />
+            </div>
+            <PasswordField
+              label="كلمة مرور جديدة (اختياري)"
+              value={editPassword}
+              onChange={(e) => setEditPassword(e.target.value)}
+              minLength={10}
+              autoComplete="new-password"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                حفظ
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy}
+                onClick={() => setEditingHr(null)}
+              >
+                إلغاء
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
-        <div className="order-2 min-w-0 space-y-4 lg:order-1">
-          {/* Mobile: cards */}
-          <div className="grid gap-3 sm:hidden">
-            {users.length === 0 ? (
-              <div className="card p-5 text-[var(--muted)]">
-                لا يوجد أعضاء بعد
-              </div>
-            ) : (
-              users.map((u) => (
-                <article key={u._id} className="card space-y-2 p-4">
+function Section({
+  title,
+  empty,
+  users,
+  showManager,
+  showRating,
+  onEdit,
+  onDelete,
+  busy,
+}: {
+  title: string;
+  empty: string;
+  users: TeamUser[];
+  showManager: boolean;
+  showRating?: boolean;
+  onEdit?: (u: TeamUser) => void;
+  onDelete?: (u: TeamUser) => void;
+  busy?: boolean;
+}) {
+  const canManage = Boolean(onEdit || onDelete);
+
+  return (
+    <div className="mb-4">
+      <h3 className="mb-3 text-lg font-semibold">{title}</h3>
+      {users.length === 0 ? (
+        <div className="card p-5 text-[var(--muted)]">{empty}</div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {users.map((u) => (
+            <article key={u._id} className="card space-y-2 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
                   <div className="font-semibold">{u.name}</div>
                   <div className="break-all text-sm text-[var(--muted)]">
                     {u.email}
                   </div>
-                  <div className="flex flex-wrap gap-2 text-sm">
-                    <span className="badge badge-teal">
-                      {ROLE_LABELS[u.role]}
-                    </span>
-                    <span className="badge badge-slate">
-                      {u.departmentId?.name || "بدون قسم"}
-                    </span>
+                </div>
+                {showRating ? (
+                  <div className="shrink-0 text-end">
+                    <div className="text-xs text-[var(--muted)]">التقييم /10</div>
+                    <div className="text-2xl font-bold text-[var(--brand)]">
+                      {formatScoreAvg(u.avgScore)}
+                    </div>
+                    <div className="text-xs text-[var(--muted)]">
+                      {(u.reviewCount ?? 0) > 0
+                        ? `${u.reviewCount} تقييم`
+                        : "لا تقييمات"}
+                    </div>
                   </div>
-                </article>
-              ))
-            )}
-          </div>
-
-          {/* Desktop/tablet: table */}
-          <div className="card hidden overflow-hidden sm:block">
-            <div className="table-wrap">
-              <table className="data team-table">
-                <thead>
-                  <tr>
-                    <th>الاسم</th>
-                    <th>البريد</th>
-                    <th>الدور</th>
-                    <th>القسم</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="text-[var(--muted)]">
-                        لا يوجد أعضاء بعد
-                      </td>
-                    </tr>
-                  ) : (
-                    users.map((u) => (
-                      <tr key={u._id}>
-                        <td className="whitespace-normal!">{u.name}</td>
-                        <td className="whitespace-normal! break-all">
-                          {u.email}
-                        </td>
-                        <td>{ROLE_LABELS[u.role]}</td>
-                        <td className="whitespace-normal!">
-                          {u.departmentId?.name || "—"}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {isCeo && departments.length > 0 ? (
-            <div className="card p-4">
-              <h3 className="mb-3 font-semibold">الأقسام</h3>
-              <ul className="space-y-2 text-sm">
-                {departments.map((d) => (
-                  <li
-                    key={d._id}
-                    className="flex flex-col gap-1 border-b border-[var(--line)] pb-2 last:border-0 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2"
-                  >
-                    <span className="font-medium">{d.name}</span>
-                    <span className="text-[var(--muted)]">
-                      {d.managerId?.name
-                        ? `المدير: ${d.managerId.name}`
-                        : "بدون مدير"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2 text-sm">
+                <span className="badge badge-teal">{ROLE_LABELS[u.role]}</span>
+                <span className="badge badge-slate">
+                  {u.departmentId?.name || "بدون قسم"}
+                </span>
+              </div>
+              {showManager ? (
+                <div className="text-sm text-[var(--muted)]">
+                  المدير: {u.managerId?.name || "—"}
+                </div>
+              ) : null}
+              {canManage ? (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {onEdit ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary text-sm"
+                      disabled={busy}
+                      onClick={() => onEdit(u)}
+                    >
+                      تعديل
+                    </button>
+                  ) : null}
+                  {onDelete ? (
+                    <button
+                      type="button"
+                      className="btn btn-danger text-sm"
+                      disabled={busy}
+                      onClick={() => onDelete(u)}
+                    >
+                      حذف
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </article>
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -104,6 +104,10 @@ export default function DashboardPage() {
       router.replace("/my-tasks");
       return;
     }
+    if (role === "hr") {
+      router.replace("/hr");
+      return;
+    }
     load().catch((e) => setError(e.message));
   }, [authStatus, role, router, load]);
 
@@ -140,7 +144,7 @@ export default function DashboardPage() {
     setHistoryError("");
   }
 
-  if (authStatus === "loading" || role === "employee") {
+  if (authStatus === "loading" || role === "employee" || role === "hr") {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;
   }
 

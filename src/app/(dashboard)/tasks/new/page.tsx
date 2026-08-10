@@ -45,8 +45,9 @@ export default function NewTaskPage() {
   });
 
   const selectedOwner = users.find((u) => u._id === form.ownerId);
-  const ownerIsCeo = selectedOwner?.role === "ceo";
-  const deptRequired = !ownerIsCeo;
+  const ownerNeedsNoDept =
+    selectedOwner?.role === "ceo" || selectedOwner?.role === "hr";
+  const deptRequired = !ownerNeedsNoDept;
 
   useEffect(() => {
     Promise.all([
@@ -102,21 +103,21 @@ export default function NewTaskPage() {
   }
 
   const title = isGm
-    ? "تكليف المدير التنفيذي أو مدير"
+    ? "تكليف تنفيذي / موارد بشرية / مدير"
     : isCeo
-      ? "تكليف مدير بمهمة"
+      ? "تكليف موارد بشرية أو مدير"
       : "تكليف موظف بمهمة";
 
   const subtitle = isGm
-    ? "المدير العام يسند المهام للمدير التنفيذي والمدراء"
+    ? "المدير العام يسند المهام للمدير التنفيذي والموارد البشرية والمدراء"
     : isCeo
-      ? "المدير التنفيذي يسند المهام للمدراء فقط"
+      ? "المدير التنفيذي يسند المهام للموارد البشرية والمدراء"
       : "المدير يسند المهام لموظفي فريقه مع قرار/أمر واضح";
 
   const ownerLabel = isGm
-    ? "المسؤول (تنفيذي / مدير)"
+    ? "المسؤول (تنفيذي / موارد بشرية / مدير)"
     : isCeo
-      ? "المدير المسؤول"
+      ? "المسؤول (موارد بشرية / مدير)"
       : "الموظف المسؤول";
 
   return (
@@ -164,7 +165,9 @@ export default function NewTaskPage() {
           </select>
         </div>
         <div className="field">
-          <label>القسم{deptRequired ? "" : " (اختياري للتنفيذي)"}</label>
+          <label>
+            القسم{deptRequired ? "" : " (اختياري للتنفيذي / الموارد البشرية)"}
+          </label>
           <select
             required={deptRequired}
             value={form.departmentId}
@@ -172,7 +175,7 @@ export default function NewTaskPage() {
             disabled={isManager}
           >
             <option value="">
-              {ownerIsCeo ? "بدون قسم / اختياري" : "اختر..."}
+              {ownerNeedsNoDept ? "بدون قسم / اختياري" : "اختر..."}
             </option>
             {departments.map((d) => (
               <option key={d._id} value={d._id}>

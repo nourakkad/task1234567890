@@ -121,14 +121,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </h1>
             </div>
           </div>
-          <button
-            type="button"
-            className="menu-toggle mt-1 text-white lg:hidden"
-            aria-label="إغلاق"
-            onClick={() => setOpen(false)}
-          >
-            <CloseIcon />
-          </button>
+          <div className="lg:hidden">
+            <button
+              type="button"
+              className="menu-toggle mt-1 text-white"
+              aria-label="إغلاق"
+              onClick={() => setOpen(false)}
+            >
+              <CloseIcon />
+            </button>
+          </div>
         </div>
 
         <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">

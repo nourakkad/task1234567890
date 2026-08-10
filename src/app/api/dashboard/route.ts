@@ -122,6 +122,13 @@ export async function GET() {
       });
     }
 
+    if (user.role === "hr") {
+      return jsonOk({
+        role: "hr",
+        redirectTo: "/hr",
+      });
+    }
+
     const now = new Date();
     const { start: monthStart, end: monthEnd } = currentMonthRange(now);
     const monthLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;

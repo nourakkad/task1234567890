@@ -74,6 +74,14 @@ function badgeFor(item: TimelineItem) {
     };
   }
 
+  if (role === "hr") {
+    return {
+      className: "msg-employee border",
+      badge: "badge-slate",
+      label: "تحديث الموارد البشرية",
+    };
+  }
+
   return {
     className: "msg-employee border",
     badge: "badge-slate",

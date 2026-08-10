@@ -53,6 +53,13 @@ async function seed() {
     role: "ceo",
   });
 
+  await User.create({
+    name: "الموارد البشرية",
+    email: "hr@alhadara.com",
+    passwordHash,
+    role: "hr",
+  });
+
   const managerInfos = [
     { name: "مدير المشتريات", email: "procurement@alhadara.com" },
     { name: "مدير اللوجستيات", email: "logistics@alhadara.com" },
@@ -313,6 +320,7 @@ async function seed() {
   console.log(`\nDemo logins (password: ${SEED_PASSWORD}):`);
   console.log("  GM:       gm@alhadara.com");
   console.log("  CEO:      ceo@alhadara.com");
+  console.log("  HR:       hr@alhadara.com");
   console.log("  Manager: procurement@alhadara.com");
   console.log("  Employee: iris@alhadara.com");
   console.log(`  GM id: ${generalManager._id}`);

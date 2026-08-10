@@ -12,6 +12,11 @@ export function formatPercent(value?: number | null) {
   return `${Math.round(value * 100)}%`;
 }
 
+export function formatScoreAvg(avg: number | null | undefined) {
+  if (avg == null || Number.isNaN(avg)) return "—";
+  return (Math.round(avg * 10) / 10).toFixed(1);
+}
+
 export function toInputDate(value?: Date | string | null) {
   if (!value) return "";
   const date = typeof value === "string" ? parseISO(value) : value;

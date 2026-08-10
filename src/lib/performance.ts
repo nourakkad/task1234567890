@@ -23,11 +23,6 @@ export function ratingRequiredOnEnd(
   return false;
 }
 
-export function formatScoreAvg(avg: number | null | undefined) {
-  if (avg == null || Number.isNaN(avg)) return "—";
-  return (Math.round(avg * 10) / 10).toFixed(1);
-}
-
 export type TeamPerformanceRow = {
   userId: string;
   name: string;

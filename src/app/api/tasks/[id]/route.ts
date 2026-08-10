@@ -101,15 +101,24 @@ export async function PATCH(request: Request, { params }: Params) {
       const owner = await User.findById(body.ownerId);
       if (!owner || !owner.active) return jsonError("المسؤول غير موجود", 404);
       if (user.role === "general_manager") {
-        if (owner.role !== "ceo" && owner.role !== "manager") {
+        if (
+          owner.role !== "ceo" &&
+          owner.role !== "hr" &&
+          owner.role !== "manager"
+        ) {
           return jsonError(
-            "المدير العام يسند المهام للمدير التنفيذي والمدراء فقط",
+            "المدير العام يسند المهام للمدير التنفيذي والموارد البشرية والمدراء فقط",
             403
           );
         }
       }
-      if (user.role === "ceo" && owner.role !== "manager") {
-        return jsonError("المدير التنفيذي يسند المهام للمدراء فقط", 403);
+      if (user.role === "ceo") {
+        if (owner.role !== "manager" && owner.role !== "hr") {
+          return jsonError(
+            "المدير التنفيذي يسند المهام للموارد البشرية والمدراء فقط",
+            403
+          );
+        }
       }
       if (user.role === "manager") {
         const isSelf = owner._id.toString() === user.id;
