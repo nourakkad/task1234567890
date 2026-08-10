@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { getSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { PasswordField } from "@/components/PasswordField";
 
 // Demo shortcuts: on in local/dev; off in production unless explicitly enabled
 const DEMO_ENABLED =
@@ -74,18 +75,15 @@ export default function LoginPage() {
               required
             />
           </div>
-          <div className="field">
-            <label htmlFor="password">كلمة المرور</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
+          <PasswordField
+            id="password"
+            name="password"
+            label="كلمة المرور"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
           {error ? (
             <p className="text-sm text-[var(--danger)]">{error}</p>
           ) : null}

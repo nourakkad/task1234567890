@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
+import { PasswordField } from "@/components/PasswordField";
 import { ROLE_LABELS } from "@/constants/lookups";
 import { apiSend } from "@/lib/client";
 
@@ -69,43 +70,48 @@ export default function AccountPage() {
           كلمة المرور يجب أن تكون 10 أحرف على الأقل وتحتوي على حروف وأرقام.
         </p>
 
-        <div className="field">
-          <label htmlFor="currentPassword">كلمة المرور الحالية</label>
-          <input
-            id="currentPassword"
-            type="password"
-            autoComplete="current-password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            required
-          />
-        </div>
+        <input
+          type="text"
+          name="username"
+          autoComplete="username"
+          value={session?.user?.email || ""}
+          readOnly
+          tabIndex={-1}
+          aria-hidden="true"
+          className="sr-only"
+        />
 
-        <div className="field">
-          <label htmlFor="newPassword">كلمة المرور الجديدة</label>
-          <input
-            id="newPassword"
-            type="password"
-            autoComplete="new-password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            required
-            minLength={10}
-          />
-        </div>
+        <PasswordField
+          id="currentPassword"
+          name="currentPassword"
+          label="كلمة المرور الحالية"
+          autoComplete="current-password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          required
+        />
 
-        <div className="field">
-          <label htmlFor="confirmPassword">تأكيد كلمة المرور الجديدة</label>
-          <input
-            id="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-            minLength={10}
-          />
-        </div>
+        <PasswordField
+          id="newPassword"
+          name="newPassword"
+          label="كلمة المرور الجديدة"
+          autoComplete="new-password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          required
+          minLength={10}
+        />
+
+        <PasswordField
+          id="confirmPassword"
+          name="confirmPassword"
+          label="تأكيد كلمة المرور الجديدة"
+          autoComplete="new-password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          required
+          minLength={10}
+        />
 
         {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
         {message ? <p className="text-sm text-[var(--ok)]">{message}</p> : null}
