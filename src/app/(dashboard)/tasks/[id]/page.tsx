@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
@@ -79,6 +79,7 @@ interface Doc {
 
 export default function TaskDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const { data: session } = useSession();
   const [tab, setTab] = useState<Tab>("details");
   const [task, setTask] = useState<Task | null>(null);
@@ -87,9 +88,12 @@ export default function TaskDetailPage() {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const role = session?.user?.role;
-  const canApprove = role === "ceo" || role === "manager";
+  const canApprove =
+    role === "general_manager" || role === "ceo" || role === "manager";
+  const canDelete = role === "ceo";
 
   const load = useCallback(async () => {
     const id = params.id;
@@ -230,6 +234,25 @@ export default function TaskDetailPage() {
     }
   }
 
+  async function onDeleteTask() {
+    if (!task || !canDelete) return;
+    const ok = window.confirm(
+      `هل تريد حذف المهمة «${task.taskNo} — ${task.name}»؟\nسيتم حذف التحديثات والموردين والمستندات المرتبطة بها نهائيًا.`
+    );
+    if (!ok) return;
+
+    setDeleting(true);
+    setError("");
+    setMessage("");
+    try {
+      await apiSend(`/api/tasks/${task._id}`, "DELETE");
+      router.replace("/track");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل حذف المهمة");
+      setDeleting(false);
+    }
+  }
+
   if (!task && !error) {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;
   }
@@ -255,6 +278,16 @@ export default function TaskDetailPage() {
             <span className="badge badge-slate">
               إنجاز {formatPercent(task.progress)}
             </span>
+            {canDelete ? (
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={deleting}
+                onClick={onDeleteTask}
+              >
+                {deleting ? "جارٍ الحذف..." : "حذف المهمة"}
+              </button>
+            ) : null}
           </div>
         }
       />

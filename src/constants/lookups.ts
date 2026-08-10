@@ -62,10 +62,16 @@ export const MANAGER_APPROVALS = [
 
 export type ManagerApproval = (typeof MANAGER_APPROVALS)[number];
 
-export const USER_ROLES = ["ceo", "manager", "employee"] as const;
+export const USER_ROLES = [
+  "general_manager",
+  "ceo",
+  "manager",
+  "employee",
+] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const ROLE_LABELS: Record<UserRole, string> = {
+  general_manager: "المدير العام",
   ceo: "المدير التنفيذي",
   manager: "مدير",
   employee: "موظف",

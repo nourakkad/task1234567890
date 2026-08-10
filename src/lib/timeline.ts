@@ -1,12 +1,10 @@
 import { nextUpdateNo } from "@/lib/counters";
-import { DailyUpdate } from "@/models/DailyUpdate";
+import {
+  DailyUpdate,
+  type TimelineEntryType,
+} from "@/models/DailyUpdate";
 
-export type TimelineEntryType =
-  | "update"
-  | "ceo_order"
-  | "ceo_decision"
-  | "manager_order"
-  | "manager_decision";
+export type { TimelineEntryType };
 
 export async function addTimelineEntry(input: {
   taskId: string;

@@ -1,29 +1,24 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { connectDB } from "@/lib/db";
 import type { SessionUser } from "@/lib/permissions";
-import { User } from "@/models/User";
 import type { UserRole } from "@/constants/lookups";
 
+/**
+ * Resolve the current user from the JWT session (no DB round-trip).
+ * Role/active status is refreshed in the jwt callback every ~5 minutes.
+ */
 export async function getSessionUser(): Promise<SessionUser | null> {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email && !session?.user?.id) return null;
-
-  // Always resolve from DB so reseed / id changes don't break task filters
-  await connectDB();
-  const dbUser = session.user.email
-    ? await User.findOne({ email: session.user.email.toLowerCase(), active: true })
-    : await User.findById(session.user.id);
-
-  if (!dbUser) return null;
+  const u = session?.user;
+  if (!u?.id || !u.email || !u.role) return null;
 
   return {
-    id: dbUser._id.toString(),
-    name: dbUser.name,
-    email: dbUser.email,
-    role: dbUser.role as UserRole,
-    departmentId: dbUser.departmentId?.toString() ?? null,
-    managerId: dbUser.managerId?.toString() ?? null,
+    id: u.id,
+    name: u.name || "",
+    email: u.email,
+    role: u.role as UserRole,
+    departmentId: u.departmentId ?? null,
+    managerId: u.managerId ?? null,
   };
 }
 

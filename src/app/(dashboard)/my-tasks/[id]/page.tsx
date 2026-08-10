@@ -94,13 +94,12 @@ export default function MyTaskDetailPage() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const t = await apiGet<TaskDetail>(`/api/tasks/${params.id}`);
+    const [t, u] = await Promise.all([
+      apiGet<TaskDetail>(`/api/tasks/${params.id}`),
+      apiGet<UpdateRow[]>(`/api/updates?taskId=${params.id}`).catch(() => []),
+    ]);
     setTask(t);
-    try {
-      setUpdates(await apiGet<UpdateRow[]>(`/api/updates?taskId=${params.id}`));
-    } catch {
-      setUpdates([]);
-    }
+    setUpdates(u);
   }, [params.id]);
 
   useEffect(() => {

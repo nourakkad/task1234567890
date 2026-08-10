@@ -10,6 +10,32 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
 
+function formatScoreAvg(avg: number | null | undefined) {
+  if (avg == null || Number.isNaN(avg)) return "—";
+  return (Math.round(avg * 10) / 10).toFixed(1);
+}
+
+const ARABIC_MONTHS = [
+  "يناير",
+  "فبراير",
+  "مارس",
+  "أبريل",
+  "مايو",
+  "يونيو",
+  "يوليو",
+  "أغسطس",
+  "سبتمبر",
+  "أكتوبر",
+  "نوفمبر",
+  "ديسمبر",
+];
+
+function formatMonthKey(monthKey: string) {
+  const [y, m] = monthKey.split("-").map(Number);
+  if (!y || !m) return monthKey;
+  return `${ARABIC_MONTHS[m - 1]} ${y}`;
+}
+
 interface AttentionTask {
   _id: string;
   taskNo: string;
@@ -22,11 +48,33 @@ interface AttentionTask {
   departmentId?: { name?: string };
 }
 
+interface TeamPerformanceRow {
+  userId: string;
+  name: string;
+  avgScore: number | null;
+  reviewCount: number;
+}
+
+interface MonthHistoryRow {
+  monthKey: string;
+  avgScore: number;
+  reviewCount: number;
+}
+
+interface PerformanceHistory {
+  userId: string;
+  name: string;
+  role: string;
+  months: MonthHistoryRow[];
+}
+
 interface DashboardData {
-  role: "ceo" | "manager" | "employee";
+  role: "general_manager" | "ceo" | "manager" | "employee";
   redirectTo?: string;
   kpis: Record<string, number>;
   needsAttention: AttentionTask[];
+  performanceMonth?: string;
+  teamPerformance?: TeamPerformanceRow[];
 }
 
 export default function DashboardPage() {
@@ -34,6 +82,10 @@ export default function DashboardPage() {
   const { data: session, status: authStatus } = useSession();
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [history, setHistory] = useState<PerformanceHistory | null>(null);
   const role = session?.user?.role;
 
   const load = useCallback(async () => {
@@ -58,19 +110,50 @@ export default function DashboardPage() {
   useAutoRefresh(() => load().catch(() => undefined), {
     enabled:
       authStatus === "authenticated" &&
-      (role === "ceo" || role === "manager"),
+      (role === "general_manager" ||
+        role === "ceo" ||
+        role === "manager"),
   });
+
+  async function openHistory(row: TeamPerformanceRow) {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistoryError("");
+    setHistory(null);
+    try {
+      const res = await apiGet<PerformanceHistory>(
+        `/api/performance/${row.userId}`
+      );
+      setHistory(res);
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error ? err.message : "فشل تحميل سجل التقييم"
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  function closeHistory() {
+    setHistoryOpen(false);
+    setHistory(null);
+    setHistoryError("");
+  }
 
   if (authStatus === "loading" || role === "employee") {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;
   }
 
-  const isCeo = role === "ceo";
+  const isLeadership = role === "general_manager" || role === "ceo";
+  const isGm = role === "general_manager";
 
   const kpiItems =
-    isCeo
+    isLeadership
       ? [
           { key: "total", label: "إجمالي المهام" },
+          ...(isGm
+            ? [{ key: "ceoTasks", label: "مهام المدير التنفيذي" }]
+            : []),
           { key: "managerTasks", label: "مهام المدراء" },
           { key: "employeeTasks", label: "مهام الموظفين" },
           { key: "waitingManagement", label: "بانتظار قرار الإدارة" },
@@ -91,7 +174,7 @@ export default function DashboardPage() {
         ];
 
   function taskHref(task: AttentionTask) {
-    if (isCeo) {
+    if (isLeadership) {
       return task.ownerId?.role === "employee"
         ? `/employee-review/${task._id}`
         : `/track/${task._id}`;
@@ -108,20 +191,27 @@ export default function DashboardPage() {
       <PageHeader
         title="لوحة المتابعة"
         subtitle={
-          isCeo
-            ? "نظرة شاملة على مهام المدراء والموظفين"
+          isLeadership
+            ? isGm
+              ? "نظرة شاملة على مهام التنفيذي والمدراء والموظفين"
+              : "نظرة شاملة على مهام المدراء والموظفين"
             : "ملخص مهامك من الإدارة ومتابعة فريقك"
         }
         actions={
           <div className="flex flex-wrap gap-2">
-            {isCeo ? (
+            {isLeadership ? (
               <>
                 <Link href="/track" className="btn btn-secondary">
-                  مهام المدراء
+                  {isGm ? "متابعة القيادة" : "مهام المدراء"}
                 </Link>
                 <Link href="/employee-review" className="btn btn-secondary">
                   مهام الموظفين
                 </Link>
+                {role === "ceo" ? (
+                  <Link href="/ceo-tasks" className="btn btn-secondary">
+                    مهامي من المدير العام
+                  </Link>
+                ) : null}
                 <Link href="/tasks/new" className="btn btn-primary">
                   إسناد مهمة
                 </Link>
@@ -161,6 +251,125 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+
+          {(role === "ceo" || role === "manager") &&
+          Array.isArray(data.teamPerformance) ? (
+            <div className="mb-6">
+              <h3 className="mb-1 text-lg font-semibold">
+                تقييم الأداء الشهري
+              </h3>
+              <p className="mb-3 text-sm text-[var(--muted)]">
+                متوسط التقييم لهذا الشهر
+                {data.performanceMonth ? ` (${data.performanceMonth})` : ""}
+                {role === "ceo"
+                  ? " — المدراء"
+                  : " — موظفو فريقك"}
+                . اضغط على البطاقة لعرض متوسطات الأشهر السابقة.
+              </p>
+              {data.teamPerformance.length === 0 ? (
+                <div className="card p-6 text-[var(--muted)]">
+                  لا يوجد أعضاء لعرض تقييمهم
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {data.teamPerformance.map((row) => (
+                    <button
+                      key={row.userId}
+                      type="button"
+                      onClick={() => openHistory(row)}
+                      className="card p-4 text-start transition hover:border-[var(--brand)] hover:shadow-md active:scale-[0.99]"
+                    >
+                      <div className="font-semibold">{row.name}</div>
+                      <div className="mt-2 flex items-end justify-between gap-2">
+                        <div>
+                          <div className="text-xs text-[var(--muted)]">
+                            المتوسط /10
+                          </div>
+                          <div className="text-3xl font-bold text-[var(--brand)]">
+                            {formatScoreAvg(row.avgScore)}
+                          </div>
+                        </div>
+                        <div className="text-sm text-[var(--muted)]">
+                          {row.reviewCount > 0
+                            ? `${row.reviewCount} تقييم`
+                            : "لا تقييمات بعد"}
+                        </div>
+                      </div>
+                      <div className="mt-3 text-xs font-semibold text-[var(--brand)]">
+                        عرض سجل الأشهر ←
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {historyOpen ? (
+            <div
+              className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+              role="dialog"
+              aria-modal="true"
+              onClick={closeHistory}
+            >
+              <div
+                className="card max-h-[85vh] w-full max-w-lg overflow-auto p-5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      سجل التقييم — {history?.name || "…"}
+                    </h3>
+                    <p className="mt-1 text-sm text-[var(--muted)]">
+                      متوسط كل شهر محفوظ ويبقى بعد بدء دورة جديدة
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={closeHistory}
+                  >
+                    إغلاق
+                  </button>
+                </div>
+
+                {historyLoading ? (
+                  <p className="text-[var(--muted)]">جارٍ التحميل...</p>
+                ) : historyError ? (
+                  <p className="text-[var(--danger)]">{historyError}</p>
+                ) : !history || history.months.length === 0 ? (
+                  <p className="text-[var(--muted)]">
+                    لا توجد تقييمات مسجّلة بعد
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {history.months.map((m) => (
+                      <li
+                        key={m.monthKey}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] px-3 py-2.5"
+                      >
+                        <div>
+                          <div className="font-medium">
+                            {formatMonthKey(m.monthKey)}
+                          </div>
+                          <div className="text-xs text-[var(--muted)]">
+                            {m.reviewCount} تقييم
+                          </div>
+                        </div>
+                        <div className="text-2xl font-bold text-[var(--brand)]">
+                          {formatScoreAvg(m.avgScore)}
+                          <span className="ms-1 text-sm font-normal text-[var(--muted)]">
+                            /10
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ) : null}
 
           <div>
             <h3 className="mb-3 text-lg font-semibold">

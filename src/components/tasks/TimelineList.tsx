@@ -9,6 +9,8 @@ export interface TimelineItem {
   result?: string;
   entryType?:
     | "update"
+    | "gm_order"
+    | "gm_decision"
     | "ceo_order"
     | "ceo_decision"
     | "manager_order"
@@ -30,19 +32,28 @@ function badgeFor(item: TimelineItem) {
   const type = item.entryType;
 
   if (
+    type === "gm_order" ||
+    type === "gm_decision" ||
     type === "ceo_order" ||
     type === "ceo_decision" ||
+    role === "general_manager" ||
     role === "ceo"
   ) {
     return {
       className: "msg-ceo border",
       badge: "badge-amber",
       label:
-        type === "ceo_decision"
-          ? "قرار تنفيذي"
-          : type === "ceo_order"
-            ? "أمر / قرار تنفيذي"
-            : "رسالة تنفيذية",
+        type === "gm_decision" || type === "ceo_decision"
+          ? role === "general_manager" || type?.startsWith("gm_")
+            ? "قرار المدير العام"
+            : "قرار تنفيذي"
+          : type === "gm_order"
+            ? "أمر / قرار المدير العام"
+            : type === "ceo_order"
+              ? "أمر / قرار تنفيذي"
+              : role === "general_manager"
+                ? "رسالة المدير العام"
+                : "رسالة تنفيذية",
     };
   }
 

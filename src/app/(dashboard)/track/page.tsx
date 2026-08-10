@@ -21,14 +21,23 @@ export default function TrackPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const role = session?.user?.role;
-  const canAssign = role === "ceo" || role === "manager";
-  const ready = authStatus === "authenticated" && !!role;
+  const canAssign =
+    role === "general_manager" || role === "ceo" || role === "manager";
+  const isLeadership = role === "general_manager" || role === "ceo";
+  const ready =
+    authStatus === "authenticated" &&
+    (role === "general_manager" || role === "ceo");
 
   const load = useCallback(
     async (silent = false) => {
       if (!silent) setLoading(true);
       try {
-        const qs = role === "ceo" ? "?managerTasks=1" : "";
+        const qs =
+          role === "general_manager"
+            ? "?leadershipTasks=1"
+            : role === "ceo"
+              ? "?managerTasks=1"
+              : "";
         const data = await apiGet<TaskCardData[]>(`/api/tasks${qs}`);
         setTasks(data);
         setError("");
@@ -61,8 +70,16 @@ export default function TrackPage() {
   return (
     <div>
       <PageHeader
-        title="متابعة مهام المدراء"
-        subtitle="تتبع ومراجعة المهام المسندة للمدراء"
+        title={
+          role === "general_manager"
+            ? "متابعة المدراء والتنفيذي"
+            : "متابعة مهام المدراء"
+        }
+        subtitle={
+          role === "general_manager"
+            ? "تتبع مهام المدير التنفيذي والمدراء"
+            : "تتبع ومراجعة المهام المسندة للمدراء"
+        }
         actions={
           canAssign ? (
             <Link href="/tasks/new" className="btn btn-primary">
@@ -75,8 +92,8 @@ export default function TrackPage() {
       <TaskFilters
         value={filters}
         onChange={setFilters}
-        showDepartment={role === "ceo"}
-        searchPlaceholder="رقم المهمة، الاسم، المدير، القسم..."
+        showDepartment={isLeadership}
+        searchPlaceholder="رقم المهمة، الاسم، المسؤول، القسم..."
       />
 
       {error ? <p className="mb-3 text-[var(--danger)]">{error}</p> : null}

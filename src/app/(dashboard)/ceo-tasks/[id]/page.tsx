@@ -4,22 +4,22 @@ import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-export default function EmployeeReviewDetailRedirect() {
+/** Reuse track detail UI for CEO inbox tasks */
+export default function CeoTaskDetailRedirect() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { data: session, status } = useSession();
 
   useEffect(() => {
     if (status === "loading") return;
-    const role = session?.user?.role;
-    if (role !== "ceo" && role !== "general_manager") {
+    if (session?.user?.role !== "ceo") {
       router.replace("/dashboard");
       return;
     }
     router.replace(
-      `/track/${params.id}?back=${encodeURIComponent("/employee-review")}`
+      `/track/${params.id}?back=${encodeURIComponent("/ceo-tasks")}`
     );
   }, [status, session?.user?.role, params.id, router]);
 
-  return <p className="text-[var(--muted)]">جارٍ فتح المراجعة...</p>;
+  return <p className="text-[var(--muted)]">جارٍ فتح المهمة...</p>;
 }

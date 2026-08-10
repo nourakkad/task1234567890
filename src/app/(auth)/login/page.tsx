@@ -11,6 +11,7 @@ const DEMO_ENABLED =
     process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN !== "false");
 
 const DEMO_ACCOUNTS = [
+  { label: "المدير العام", email: "gm@alhadara.com" },
   { label: "المدير التنفيذي", email: "ceo@alhadara.com" },
   { label: "مدير المشتريات", email: "procurement@alhadara.com" },
   { label: "موظف (Iris)", email: "iris@alhadara.com" },

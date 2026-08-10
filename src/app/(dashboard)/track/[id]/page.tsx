@@ -9,10 +9,11 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
+import { StarRating } from "@/components/tasks/StarRating";
 import { TimelineList } from "@/components/tasks/TimelineList";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
@@ -35,6 +36,7 @@ interface TaskDetail {
   managerApproval: string;
   closureDate?: string;
   lastUpdate?: string;
+  performanceScore?: number | null;
   ownerId?: { name: string; email?: string; role?: string };
   departmentId?: { name: string };
   assignedById?: { name: string };
@@ -72,13 +74,18 @@ export default function TrackDetailPage() {
 function TrackDetailInner() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { data: session } = useSession();
-  const isCeo = session?.user?.role === "ceo";
+  const role = session?.user?.role;
+  const isLeadership = role === "general_manager" || role === "ceo";
+  const canDelete = role === "ceo";
   const backHref =
-    searchParams.get("back") || (isCeo ? "/track" : "/manager-tasks");
+    searchParams.get("back") ||
+    (isLeadership ? "/track" : "/manager-tasks");
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [updates, setUpdates] = useState<UpdateRow[]>([]);
   const [order, setOrder] = useState("");
+  const [score, setScore] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -91,6 +98,7 @@ function TrackDetailInner() {
     setTask(t);
     setUpdates(u);
     setOrder(t.managementDecision || "");
+    if (t.performanceScore != null) setScore(t.performanceScore);
   }, [params.id]);
 
   useEffect(() => {
@@ -102,6 +110,8 @@ function TrackDetailInner() {
   });
 
   const closed = task?.status === "مكتملة" || task?.status === "ملغاة";
+  const needsRating =
+    role === "ceo" && task?.ownerId?.role === "manager" && !closed;
 
   const actions = useMemo(() => {
     if (!task || closed) return { accept: false, reject: false, end: false };
@@ -124,6 +134,10 @@ function TrackDetailInner() {
 
   async function submitDecision(decision: Decision) {
     if (!task) return;
+    if (decision === "ended" && needsRating && score == null) {
+      setError("اختر تقييم الأداء من 1 إلى 10 قبل إنهاء المهمة");
+      return;
+    }
     setBusy(true);
     setError("");
     setMessage("");
@@ -131,7 +145,13 @@ function TrackDetailInner() {
       const updated = await apiSend<TaskDetail>(
         `/api/tasks/${task._id}/approve`,
         "POST",
-        { decision, notes: order }
+        {
+          decision,
+          notes: order,
+          ...(decision === "ended" && needsRating
+            ? { performanceScore: score }
+            : {}),
+        }
       );
       setTask(updated);
       if (decision === "note") setMessage("تم حفظ القرار / الأمر");
@@ -149,6 +169,25 @@ function TrackDetailInner() {
   function onSaveOrder(e: FormEvent) {
     e.preventDefault();
     submitDecision("note");
+  }
+
+  async function onDeleteTask() {
+    if (!task || !canDelete) return;
+    const ok = window.confirm(
+      `هل تريد حذف المهمة «${task.taskNo} — ${task.name}»؟\nسيتم حذف التحديثات والموردين والمستندات المرتبطة بها نهائيًا.`
+    );
+    if (!ok) return;
+
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await apiSend(`/api/tasks/${task._id}`, "DELETE");
+      router.replace(backHref);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل حذف المهمة");
+      setBusy(false);
+    }
   }
 
   if (!task) {
@@ -169,9 +208,21 @@ function TrackDetailInner() {
             : "تفاصيل المهمة"
         }
         actions={
-          <Link href={backHref} className="btn btn-secondary">
-            العودة
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {canDelete ? (
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={busy}
+                onClick={onDeleteTask}
+              >
+                حذف المهمة
+              </button>
+            ) : null}
+            <Link href={backHref} className="btn btn-secondary">
+              العودة
+            </Link>
+          </div>
         }
       />
 
@@ -231,18 +282,30 @@ function TrackDetailInner() {
               value={task.managementDecision || "—"}
               wide
             />
+            {task.performanceScore != null ? (
+              <Detail
+                label="تقييم الأداء"
+                value={`${task.performanceScore}/10`}
+              />
+            ) : null}
             {task.closureDate ? (
               <Detail label="تاريخ الإغلاق" value={formatDate(task.closureDate)} />
             ) : null}
           </dl>
         </article>
 
-        {isCeo ? (
+        {isLeadership ? (
           <article className="card space-y-4 p-6">
             <div>
-              <h3 className="text-lg font-semibold">قرار / أمر المدير التنفيذي</h3>
+              <h3 className="text-lg font-semibold">
+                {role === "general_manager"
+                  ? "قرار / أمر المدير العام"
+                  : "قرار / أمر المدير التنفيذي"}
+              </h3>
               <p className="mt-1 text-sm text-[var(--muted)]">
-                اكتب القرار أو الأمر للمدير، ثم اقبل أو ارفض أو أنهِ المهمة
+                {role === "general_manager"
+                  ? "اكتب القرار أو الأمر للمدير التنفيذي أو المدير، ثم اقبل أو ارفض أو أنهِ المهمة"
+                  : "اكتب القرار أو الأمر للمدير، ثم اقبل أو ارفض أو أنهِ المهمة"}
               </p>
             </div>
 
@@ -265,6 +328,15 @@ function TrackDetailInner() {
                 حفظ القرار / الأمر
               </button>
             </form>
+
+            {needsRating || task.performanceScore != null ? (
+              <StarRating
+                value={task.performanceScore ?? score}
+                onChange={needsRating ? setScore : undefined}
+                disabled={closed || busy || !needsRating}
+                label="تقييم أداء المدير (من 1 إلى 10)"
+              />
+            ) : null}
 
             {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
             {message ? <p className="text-sm text-[var(--ok)]">{message}</p> : null}
@@ -289,7 +361,7 @@ function TrackDetailInner() {
                   <button
                     type="button"
                     className="btn btn-primary"
-                    disabled={busy}
+                    disabled={busy || (needsRating && score == null)}
                     onClick={() => submitDecision("ended")}
                     style={{ background: "var(--ok)" }}
                   >

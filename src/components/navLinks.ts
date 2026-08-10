@@ -5,14 +5,36 @@ export const NAV_LINKS: Array<{
   label: string;
   roles?: UserRole[];
 }> = [
-  { href: "/dashboard", label: "لوحة المتابعة", roles: ["ceo", "manager"] },
-  { href: "/track", label: "متابعة مهام المدراء", roles: ["ceo"] },
+  {
+    href: "/dashboard",
+    label: "لوحة المتابعة",
+    roles: ["general_manager", "ceo", "manager"],
+  },
+  {
+    href: "/track",
+    label: "متابعة المدراء والتنفيذي",
+    roles: ["general_manager"],
+  },
+  {
+    href: "/track",
+    label: "متابعة مهام المدراء",
+    roles: ["ceo"],
+  },
   {
     href: "/employee-review",
     label: "متابعة مهام الموظفين",
+    roles: ["general_manager", "ceo"],
+  },
+  {
+    href: "/ceo-tasks",
+    label: "مهام من المدير العام",
     roles: ["ceo"],
   },
-  { href: "/tasks/new", label: "إسناد مهمة", roles: ["ceo", "manager"] },
+  {
+    href: "/tasks/new",
+    label: "إسناد مهمة",
+    roles: ["general_manager", "ceo", "manager"],
+  },
   {
     href: "/departments",
     label: "إدارة الأقسام",
@@ -41,7 +63,7 @@ export const NAV_LINKS: Array<{
   {
     href: "/account",
     label: "حسابي",
-    roles: ["ceo", "manager", "employee"],
+    roles: ["general_manager", "ceo", "manager", "employee"],
   },
 ];
 
@@ -52,7 +74,8 @@ export function isNavActive(pathname: string, href: string) {
     href === "/tasks/new" ||
     href === "/team" ||
     href === "/departments" ||
-    href === "/account"
+    href === "/account" ||
+    href === "/ceo-tasks"
   ) {
     return pathname === href || pathname.startsWith(`${href}/`);
   }

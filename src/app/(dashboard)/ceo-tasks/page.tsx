@@ -13,25 +13,21 @@ import {
   type TaskFilterState,
 } from "@/lib/taskFilters";
 
-interface EmployeeTask extends TaskCardData {
-  assignedById?: { name?: string; role?: string } | null;
-}
-
-export default function EmployeeReviewPage() {
+/** CEO inbox: tasks assigned by General Manager */
+export default function CeoTasksPage() {
   const { data: session, status: authStatus } = useSession();
-  const [tasks, setTasks] = useState<EmployeeTask[]>([]);
+  const [tasks, setTasks] = useState<TaskCardData[]>([]);
   const [filters, setFilters] = useState<TaskFilterState>(EMPTY_TASK_FILTERS);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const role = session?.user?.role;
-  const ready =
-    authStatus === "authenticated" &&
-    (role === "ceo" || role === "general_manager");
+  const ready = authStatus === "authenticated" && session?.user?.role === "ceo";
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const data = await apiGet<EmployeeTask[]>("/api/tasks?employeeTasks=1");
+      const data = await apiGet<TaskCardData[]>(
+        "/api/tasks?fromLeadership=1"
+      );
       setTasks(data);
       setError("");
     } catch (e) {
@@ -44,7 +40,7 @@ export default function EmployeeReviewPage() {
   useEffect(() => {
     if (authStatus === "loading") return;
     if (!ready) {
-      setError("هذه الصفحة للإدارة العليا فقط");
+      setError("هذه الصفحة للمدير التنفيذي فقط");
       setLoading(false);
       return;
     }
@@ -62,10 +58,10 @@ export default function EmployeeReviewPage() {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;
   }
 
-  if (role !== "ceo" && role !== "general_manager") {
+  if (session?.user?.role !== "ceo") {
     return (
       <div className="card p-6 text-[var(--danger)]">
-        هذه الصفحة للإدارة العليا فقط
+        هذه الصفحة للمدير التنفيذي فقط
       </div>
     );
   }
@@ -73,15 +69,14 @@ export default function EmployeeReviewPage() {
   return (
     <div>
       <PageHeader
-        title="متابعة مهام الموظفين"
-        subtitle="عرض ومراجعة جميع مهام الموظفين عبر الأقسام"
+        title="مهام من المدير العام"
+        subtitle="المهام المسندة إليك من المدير العام — نفّذ وأضف التحديثات"
       />
 
       <TaskFilters
         value={filters}
         onChange={setFilters}
-        showDepartment
-        searchPlaceholder="رقم المهمة، الموظف، القسم، الرسالة..."
+        searchPlaceholder="رقم المهمة، الاسم..."
       />
 
       {error ? <p className="mb-3 text-[var(--danger)]">{error}</p> : null}
@@ -93,10 +88,10 @@ export default function EmployeeReviewPage() {
       ) : null}
 
       {loading ? (
-        <p className="text-[var(--muted)]">جارٍ تحميل مهام الموظفين...</p>
+        <p className="text-[var(--muted)]">جارٍ التحميل...</p>
       ) : filtered.length === 0 ? (
         <div className="card p-8 text-center text-[var(--muted)]">
-          لا توجد مهام موظفين مطابقة للتصفية
+          لا توجد مهام من المدير العام حاليًا
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -104,7 +99,7 @@ export default function EmployeeReviewPage() {
             <TaskCard
               key={task._id}
               task={task}
-              href={`/employee-review/${task._id}`}
+              href={`/ceo-tasks/${task._id}`}
             />
           ))}
         </div>

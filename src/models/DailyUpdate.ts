@@ -2,6 +2,8 @@ import { Schema, models, model, Types } from "mongoose";
 
 export type TimelineEntryType =
   | "update"
+  | "gm_order"
+  | "gm_decision"
   | "ceo_order"
   | "ceo_decision"
   | "manager_order"
@@ -45,6 +47,8 @@ const DailyUpdateSchema = new Schema<IDailyUpdate>(
       type: String,
       enum: [
         "update",
+        "gm_order",
+        "gm_decision",
         "ceo_order",
         "ceo_decision",
         "manager_order",

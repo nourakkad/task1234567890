@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db";
 import { jsonError, jsonOk, handleApiError } from "@/lib/api";
 import {
   canAccessTask,
+  canDeleteTask,
   canEditTask,
   canSetManagementDecision,
   getTeamMemberIds,
@@ -10,6 +11,9 @@ import {
 import { sanitizeHttpUrl } from "@/lib/safeUrl";
 import { requireSessionUser } from "@/lib/session";
 import { clampProgress, validateStatusChange } from "@/lib/taskStatus";
+import { DailyUpdate } from "@/models/DailyUpdate";
+import { SampleDocument } from "@/models/SampleDocument";
+import { Supplier } from "@/models/Supplier";
 import { Task } from "@/models/Task";
 import { User } from "@/models/User";
 
@@ -96,6 +100,14 @@ export async function PATCH(request: Request, { params }: Params) {
       }
       const owner = await User.findById(body.ownerId);
       if (!owner || !owner.active) return jsonError("المسؤول غير موجود", 404);
+      if (user.role === "general_manager") {
+        if (owner.role !== "ceo" && owner.role !== "manager") {
+          return jsonError(
+            "المدير العام يسند المهام للمدير التنفيذي والمدراء فقط",
+            403
+          );
+        }
+      }
       if (user.role === "ceo" && owner.role !== "manager") {
         return jsonError("المدير التنفيذي يسند المهام للمدراء فقط", 403);
       }
@@ -176,7 +188,11 @@ export async function PATCH(request: Request, { params }: Params) {
     }
 
     if (body.managerApproval !== undefined) {
-      if (user.role !== "ceo" && user.role !== "manager") {
+      if (
+        user.role !== "general_manager" &&
+        user.role !== "ceo" &&
+        user.role !== "manager"
+      ) {
         return jsonError("غير مصرح باعتماد المهمة", 403);
       }
       task.managerApproval = body.managerApproval;
@@ -189,7 +205,11 @@ export async function PATCH(request: Request, { params }: Params) {
       if (task.managerApproval !== "approved" && user.role === "employee") {
         return jsonError("لا يمكن إغلاق المهمة دون اعتماد المدير", 400);
       }
-      if (user.role === "ceo" || user.role === "manager") {
+      if (
+        user.role === "general_manager" ||
+        user.role === "ceo" ||
+        user.role === "manager"
+      ) {
         task.closureDate = body.closureDate
           ? new Date(body.closureDate)
           : new Date();
@@ -212,6 +232,33 @@ export async function PATCH(request: Request, { params }: Params) {
       .populate("assignedById", "name email");
 
     return jsonOk(populated);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function DELETE(_request: Request, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    if (!canDeleteTask(user.role)) {
+      return jsonError("فقط المدير التنفيذي يمكنه حذف المهام", 403);
+    }
+
+    await connectDB();
+    const { id } = await params;
+    if (!Types.ObjectId.isValid(id)) return jsonError("معرّف غير صالح", 400);
+
+    const task = await Task.findById(id);
+    if (!task) return jsonError("المهمة غير موجودة", 404);
+
+    await Promise.all([
+      DailyUpdate.deleteMany({ taskId: task._id }),
+      Supplier.deleteMany({ taskId: task._id }),
+      SampleDocument.deleteMany({ taskId: task._id }),
+      task.deleteOne(),
+    ]);
+
+    return jsonOk({ ok: true, message: "تم حذف المهمة" });
   } catch (error) {
     return handleApiError(error);
   }

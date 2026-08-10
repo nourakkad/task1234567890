@@ -16,10 +16,22 @@ export default withAuth(
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
     if (
-      (path.startsWith("/track") ||
-        path.startsWith("/employee-review") ||
-        path.startsWith("/departments") ||
-        path.startsWith("/settings")) &&
+      path.startsWith("/ceo-tasks") &&
+      role &&
+      role !== "ceo"
+    ) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+    if (
+      (path.startsWith("/track") || path.startsWith("/employee-review")) &&
+      role &&
+      role !== "ceo" &&
+      role !== "general_manager"
+    ) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+    if (
+      (path.startsWith("/departments") || path.startsWith("/settings")) &&
       role &&
       role !== "ceo"
     ) {
@@ -54,6 +66,7 @@ export const config = {
     "/updates/:path*",
     "/suppliers/:path*",
     "/documents/:path*",
+    "/ceo-tasks/:path*",
     "/team/:path*",
     "/departments/:path*",
     "/settings/:path*",

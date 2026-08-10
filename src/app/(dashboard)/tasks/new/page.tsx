@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
-import { TASK_PRIORITIES, TASK_STATUSES } from "@/constants/lookups";
+import { ROLE_LABELS, TASK_PRIORITIES, TASK_STATUSES } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
 
 interface AssignableUser {
@@ -23,6 +23,7 @@ export default function NewTaskPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const role = session?.user?.role;
+  const isGm = role === "general_manager";
   const isCeo = role === "ceo";
   const isManager = role === "manager";
   const [users, setUsers] = useState<AssignableUser[]>([]);
@@ -42,6 +43,10 @@ export default function NewTaskPage() {
     managementDecision: "",
     progress: 0,
   });
+
+  const selectedOwner = users.find((u) => u._id === form.ownerId);
+  const ownerIsCeo = selectedOwner?.role === "ceo";
+  const deptRequired = !ownerIsCeo;
 
   useEffect(() => {
     Promise.all([
@@ -63,7 +68,7 @@ export default function NewTaskPage() {
 
   function onOwnerChange(ownerId: string) {
     const owner = users.find((u) => u._id === ownerId);
-    let departmentId = form.departmentId;
+    let departmentId = "";
     if (owner?.departmentId) {
       departmentId =
         typeof owner.departmentId === "string"
@@ -81,11 +86,13 @@ export default function NewTaskPage() {
       const orderText = form.managementDecision.trim();
       const task = await apiSend<{ _id: string }>("/api/tasks", "POST", {
         ...form,
-        managementDecision: isCeo ? orderText : "",
+        departmentId: form.departmentId || undefined,
+        managementDecision: isGm || isCeo ? orderText : "",
         nextAction: orderText || form.nextAction,
         progress: Number(form.progress) / 100,
       });
-      if (isCeo) router.push(`/track/${task._id}`);
+      if (isGm) router.push(`/track/${task._id}`);
+      else if (isCeo) router.push(`/track/${task._id}`);
       else if (isManager) router.push(`/team-tasks/${task._id}`);
       else router.push(`/my-tasks/${task._id}`);
     } catch (err) {
@@ -94,16 +101,27 @@ export default function NewTaskPage() {
     }
   }
 
+  const title = isGm
+    ? "تكليف المدير التنفيذي أو مدير"
+    : isCeo
+      ? "تكليف مدير بمهمة"
+      : "تكليف موظف بمهمة";
+
+  const subtitle = isGm
+    ? "المدير العام يسند المهام للمدير التنفيذي والمدراء"
+    : isCeo
+      ? "المدير التنفيذي يسند المهام للمدراء فقط"
+      : "المدير يسند المهام لموظفي فريقه مع قرار/أمر واضح";
+
+  const ownerLabel = isGm
+    ? "المسؤول (تنفيذي / مدير)"
+    : isCeo
+      ? "المدير المسؤول"
+      : "الموظف المسؤول";
+
   return (
     <div>
-      <PageHeader
-        title={isCeo ? "تكليف مدير بمهمة" : "تكليف موظف بمهمة"}
-        subtitle={
-          isCeo
-            ? "المدير التنفيذي يسند المهام للمدراء فقط"
-            : "المدير يسند المهام لموظفي فريقه مع قرار/أمر واضح"
-        }
-      />
+      <PageHeader title={title} subtitle={subtitle} />
       <form
         onSubmit={onSubmit}
         className="card grid max-w-3xl gap-4 p-5 md:grid-cols-2"
@@ -125,7 +143,7 @@ export default function NewTaskPage() {
           />
         </div>
         <div className="field">
-          <label>{isCeo ? "المدير المسؤول" : "الموظف المسؤول"}</label>
+          <label>{ownerLabel}</label>
           <select
             required
             value={form.ownerId}
@@ -135,22 +153,27 @@ export default function NewTaskPage() {
             {users.map((u) => (
               <option key={u._id} value={u._id}>
                 {u.name}
+                {ROLE_LABELS[u.role as keyof typeof ROLE_LABELS]
+                  ? ` — ${ROLE_LABELS[u.role as keyof typeof ROLE_LABELS]}`
+                  : ""}
                 {typeof u.departmentId === "object" && u.departmentId?.name
-                  ? ` — ${u.departmentId.name}`
+                  ? ` (${u.departmentId.name})`
                   : ""}
               </option>
             ))}
           </select>
         </div>
         <div className="field">
-          <label>القسم</label>
+          <label>القسم{deptRequired ? "" : " (اختياري للتنفيذي)"}</label>
           <select
-            required
+            required={deptRequired}
             value={form.departmentId}
             onChange={(e) => setForm({ ...form, departmentId: e.target.value })}
-            disabled={!!form.ownerId || isManager}
+            disabled={isManager}
           >
-            <option value="">اختر...</option>
+            <option value="">
+              {ownerIsCeo ? "بدون قسم / اختياري" : "اختر..."}
+            </option>
             {departments.map((d) => (
               <option key={d._id} value={d._id}>
                 {d.name}
@@ -201,9 +224,7 @@ export default function NewTaskPage() {
           />
         </div>
         <div className="field md:col-span-2">
-          <label>
-            {isCeo ? "القرار / الأمر للمدير" : "القرار / الأمر للموظف"}
-          </label>
+          <label>القرار / الأمر</label>
           <textarea
             rows={4}
             value={form.managementDecision}
@@ -214,11 +235,7 @@ export default function NewTaskPage() {
                 nextAction: e.target.value,
               })
             }
-            placeholder={
-              isCeo
-                ? "اكتب القرار أو الأمر الذي يجب على المدير تنفيذه..."
-                : "اكتب القرار أو الأمر الذي يجب على الموظف تنفيذه..."
-            }
+            placeholder="اكتب القرار أو الأمر المطلوب تنفيذه..."
             required
           />
         </div>
@@ -227,11 +244,7 @@ export default function NewTaskPage() {
         ) : null}
         <div className="md:col-span-2 flex gap-2">
           <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading
-              ? "جارٍ الحفظ..."
-              : isCeo
-                ? "إسناد للمدير"
-                : "إسناد للموظف"}
+            {loading ? "جارٍ الحفظ..." : "إسناد المهمة"}
           </button>
           <button
             type="button"

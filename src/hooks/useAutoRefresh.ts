@@ -7,9 +7,9 @@ type RefreshFn = () => void | Promise<void>;
 interface Options {
   /** Default true */
   enabled?: boolean;
-  /** Minimum wait in ms (default 2 minutes) */
+  /** Minimum wait in ms (default 5 minutes) */
   minMs?: number;
-  /** Maximum wait in ms (default 4 minutes) */
+  /** Maximum wait in ms (default 8 minutes) */
   maxMs?: number;
 }
 
@@ -18,7 +18,7 @@ interface Options {
  * Skips ticks while the browser tab is hidden; reschedules after each run.
  */
 export function useAutoRefresh(onRefresh: RefreshFn, options: Options = {}) {
-  const { enabled = true, minMs = 2 * 60_000, maxMs = 4 * 60_000 } = options;
+  const { enabled = true, minMs = 5 * 60_000, maxMs = 8 * 60_000 } = options;
   const cbRef = useRef(onRefresh);
   cbRef.current = onRefresh;
 

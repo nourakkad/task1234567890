@@ -19,21 +19,32 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
 
-    const taskFilter = await getVisibleTaskFilter(user);
-    const visibleTasks = await Task.find(taskFilter).select("_id");
-    const visibleIds = visibleTasks.map((t) => t._id);
-
-    const filter: Record<string, unknown> = { taskId: { $in: visibleIds } };
     if (taskId) {
-      if (!visibleIds.some((id) => id.toString() === taskId)) {
+      if (!Types.ObjectId.isValid(taskId)) {
+        return jsonError("معرّف مهمة غير صالح");
+      }
+      const task = await Task.findById(taskId).select("ownerId departmentId");
+      if (!task) return jsonError("المهمة غير موجودة", 404);
+      const teamIds =
+        user.role === "manager" ? await getTeamMemberIds(user.id) : [];
+      if (!canAccessTask(user, task, teamIds)) {
         return jsonError("غير مصرح", 403);
       }
-      filter.taskId = taskId;
+      const suppliers = await Supplier.find({ taskId })
+        .populate("taskId", "taskNo name")
+        .sort({ updatedAt: -1 })
+        .lean();
+      return jsonOk(suppliers);
     }
 
-    const suppliers = await Supplier.find(filter)
+    const taskFilter = await getVisibleTaskFilter(user);
+    const visibleTasks = await Task.find(taskFilter).select("_id").lean();
+    const visibleIds = visibleTasks.map((t) => t._id);
+
+    const suppliers = await Supplier.find({ taskId: { $in: visibleIds } })
       .populate("taskId", "taskNo name")
       .sort({ updatedAt: -1 })
+      .limit(200)
       .lean();
 
     return jsonOk(suppliers);

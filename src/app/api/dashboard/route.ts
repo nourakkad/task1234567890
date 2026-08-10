@@ -2,57 +2,112 @@ import { Types } from "mongoose";
 import { connectDB } from "@/lib/db";
 import { jsonOk, handleApiError } from "@/lib/api";
 import { getVisibleTaskFilter } from "@/lib/permissions";
+import {
+  buildTeamPerformance,
+  currentMonthRange,
+} from "@/lib/performance";
 import { requireSessionUser } from "@/lib/session";
 import { Task } from "@/models/Task";
 import { User } from "@/models/User";
 
-function computeKpis(
-  tasks: Array<{
-    status: string;
-    progress?: number;
-    targetDate?: Date | string | null;
-  }>
-) {
+async function kpiFromMatch(match: Record<string, unknown>) {
   const now = new Date();
-  const total = tasks.length;
-  const inProgress = tasks.filter((t) => t.status === "قيد التنفيذ").length;
-  const waitingSupplier = tasks.filter(
-    (t) => t.status === "بانتظار المورد"
-  ).length;
-  const waitingManagement = tasks.filter(
-    (t) => t.status === "بانتظار قرار الإدارة"
-  ).length;
-  const completed = tasks.filter((t) => t.status === "مكتملة").length;
-  const paused = tasks.filter((t) => t.status === "معلقة").length;
-  const overdue = tasks.filter(
-    (t) =>
-      t.targetDate &&
-      new Date(t.targetDate) < now &&
-      t.status !== "مكتملة" &&
-      t.status !== "ملغاة"
-  ).length;
-  const avgProgress =
-    total === 0
-      ? 0
-      : tasks.reduce((sum, t) => sum + (t.progress || 0), 0) / total;
+  const [rows] = await Task.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: 1 },
+        inProgress: {
+          $sum: { $cond: [{ $eq: ["$status", "قيد التنفيذ"] }, 1, 0] },
+        },
+        waitingSupplier: {
+          $sum: { $cond: [{ $eq: ["$status", "بانتظار المورد"] }, 1, 0] },
+        },
+        waitingManagement: {
+          $sum: {
+            $cond: [{ $eq: ["$status", "بانتظار قرار الإدارة"] }, 1, 0],
+          },
+        },
+        completed: {
+          $sum: { $cond: [{ $eq: ["$status", "مكتملة"] }, 1, 0] },
+        },
+        paused: {
+          $sum: { $cond: [{ $eq: ["$status", "معلقة"] }, 1, 0] },
+        },
+        overdue: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $ne: ["$targetDate", null] },
+                  { $lt: ["$targetDate", now] },
+                  { $not: [{ $in: ["$status", ["مكتملة", "ملغاة"]] }] },
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+        progressSum: { $sum: { $ifNull: ["$progress", 0] } },
+      },
+    },
+  ]);
+
+  if (!rows) {
+    return {
+      total: 0,
+      inProgress: 0,
+      waitingSupplier: 0,
+      waitingManagement: 0,
+      completed: 0,
+      paused: 0,
+      overdue: 0,
+      avgProgress: 0,
+    };
+  }
 
   return {
-    total,
-    inProgress,
-    waitingSupplier,
-    waitingManagement,
-    completed,
-    paused,
-    overdue,
-    avgProgress,
+    total: rows.total,
+    inProgress: rows.inProgress,
+    waitingSupplier: rows.waitingSupplier,
+    waitingManagement: rows.waitingManagement,
+    completed: rows.completed,
+    paused: rows.paused,
+    overdue: rows.overdue,
+    avgProgress: rows.total === 0 ? 0 : rows.progressSum / rows.total,
   };
 }
 
-function uniqueById<T extends { _id: unknown }>(items: T[]) {
-  return items.filter(
-    (t, idx, arr) =>
-      arr.findIndex((x) => String(x._id) === String(t._id)) === idx
-  );
+function attentionMatch(scope: Record<string, unknown>, now: Date) {
+  return {
+    $and: [
+      scope,
+      {
+        $or: [
+          { status: "معلقة" },
+          { status: "بانتظار قرار الإدارة" },
+          {
+            targetDate: { $lt: now },
+            status: { $nin: ["مكتملة", "ملغاة"] },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+async function fetchNeedsAttention(scope: Record<string, unknown>, now: Date) {
+  return Task.find(attentionMatch(scope, now))
+    .select(
+      "taskNo name status priority lastUpdate nextAction updatedAt ownerId departmentId"
+    )
+    .populate("ownerId", "name role")
+    .populate("departmentId", "name")
+    .sort({ lastUpdate: -1, updatedAt: -1 })
+    .limit(12)
+    .lean();
 }
 
 export async function GET() {
@@ -68,106 +123,109 @@ export async function GET() {
     }
 
     const now = new Date();
+    const { start: monthStart, end: monthEnd } = currentMonthRange(now);
+    const monthLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    if (user.role === "ceo") {
-      const managers = await User.find({ role: "manager", active: true }).select(
-        "_id"
-      );
-      const employees = await User.find({
-        role: "employee",
-        active: true,
-      }).select("_id");
+    if (user.role === "ceo" || user.role === "general_manager") {
+      const [managers, employees, ceos] = await Promise.all([
+        User.find({ role: "manager", active: true }).select("_id name").lean(),
+        User.find({ role: "employee", active: true }).select("_id").lean(),
+        user.role === "general_manager"
+          ? User.find({ role: "ceo", active: true }).select("_id").lean()
+          : Promise.resolve([]),
+      ]);
 
       const managerIds = managers.map((m) => m._id);
       const employeeIds = employees.map((e) => e._id);
+      const ceoIds = ceos.map((c) => c._id);
 
-      const [managerTasks, employeeTasks, allTasks] = await Promise.all([
-        Task.find({ ownerId: { $in: managerIds } }).lean(),
-        Task.find({ ownerId: { $in: employeeIds } }).lean(),
-        Task.find({})
-          .populate("ownerId", "name role")
-          .populate("departmentId", "name")
-          .lean(),
+      const [
+        kpis,
+        managerTasks,
+        employeeTasks,
+        ceoTasks,
+        needsAttention,
+        teamPerformance,
+      ] = await Promise.all([
+        kpiFromMatch({}),
+        Task.countDocuments({ ownerId: { $in: managerIds } }),
+        Task.countDocuments({ ownerId: { $in: employeeIds } }),
+        ceoIds.length
+          ? Task.countDocuments({ ownerId: { $in: ceoIds } })
+          : Promise.resolve(0),
+        fetchNeedsAttention({}, now),
+        user.role === "ceo"
+          ? buildTeamPerformance(managers, Task, monthStart, monthEnd)
+          : Promise.resolve([]),
       ]);
 
-      const needsAttention = allTasks
-        .filter(
-          (t) =>
-            t.status === "معلقة" ||
-            t.status === "بانتظار قرار الإدارة" ||
-            (t.targetDate &&
-              new Date(t.targetDate) < now &&
-              t.status !== "مكتملة" &&
-              t.status !== "ملغاة")
-        )
-        .sort(
-          (a, b) =>
-            new Date(b.lastUpdate || b.updatedAt).getTime() -
-            new Date(a.lastUpdate || a.updatedAt).getTime()
-        )
-        .slice(0, 12);
-
       return jsonOk({
-        role: "ceo",
+        role: user.role,
         kpis: {
-          ...computeKpis(allTasks),
-          managerTasks: managerTasks.length,
-          employeeTasks: employeeTasks.length,
+          ...kpis,
+          managerTasks,
+          employeeTasks,
+          ceoTasks,
           managersCount: managers.length,
           employeesCount: employees.length,
         },
         needsAttention,
+        performanceMonth: monthLabel,
+        teamPerformance,
       });
     }
 
     // Manager
-    const filter = await getVisibleTaskFilter(user);
-    const visibleTasks = await Task.find(filter)
-      .populate("ownerId", "name role")
-      .populate("departmentId", "name")
-      .lean();
+    const visibleFilter = await getVisibleTaskFilter(user);
+    const ownerSelf = new Types.ObjectId(user.id);
+    const teamMatch = {
+      assignedById: ownerSelf,
+      ownerId: { $ne: ownerSelf },
+    };
+    const scope = { $or: [visibleFilter, teamMatch] };
 
-    const myCeoTasks = await Task.find({
-      ownerId: new Types.ObjectId(user.id),
-    }).lean();
+    const [
+      employees,
+      kpis,
+      fromCeo,
+      teamAssigned,
+      waitingMyDecision,
+      needsAttention,
+    ] = await Promise.all([
+      User.find({
+        role: "employee",
+        managerId: user.id,
+        active: true,
+      })
+        .select("_id name")
+        .lean(),
+      kpiFromMatch(scope),
+      Task.countDocuments({ ownerId: ownerSelf }),
+      Task.countDocuments(teamMatch),
+      Task.countDocuments({
+        $and: [scope, { status: "بانتظار قرار الإدارة" }],
+      }),
+      fetchNeedsAttention(scope, now),
+    ]);
 
-    const teamTasks = await Task.find({
-      assignedById: new Types.ObjectId(user.id),
-      ownerId: { $ne: new Types.ObjectId(user.id) },
-    })
-      .populate("ownerId", "name role")
-      .populate("departmentId", "name")
-      .lean();
-
-    const combined = uniqueById([...visibleTasks, ...teamTasks]);
-    const needsAttention = combined
-      .filter(
-        (t) =>
-          t.status === "معلقة" ||
-          t.status === "بانتظار قرار الإدارة" ||
-          (t.targetDate &&
-            new Date(t.targetDate) < now &&
-            t.status !== "مكتملة" &&
-            t.status !== "ملغاة")
-      )
-      .sort(
-        (a, b) =>
-          new Date(b.lastUpdate || b.updatedAt).getTime() -
-          new Date(a.lastUpdate || a.updatedAt).getTime()
-      )
-      .slice(0, 12);
+    const teamPerformance = await buildTeamPerformance(
+      employees,
+      Task,
+      monthStart,
+      monthEnd
+    );
 
     return jsonOk({
       role: "manager",
       kpis: {
-        ...computeKpis(combined),
-        fromCeo: myCeoTasks.length,
-        teamAssigned: teamTasks.length,
-        waitingMyDecision: combined.filter(
-          (t) => t.status === "بانتظار قرار الإدارة"
-        ).length,
+        ...kpis,
+        fromCeo,
+        teamAssigned,
+        waitingMyDecision,
       },
       needsAttention,
+      performanceMonth: monthLabel,
+      teamPerformance,
     });
   } catch (error) {
     return handleApiError(error);

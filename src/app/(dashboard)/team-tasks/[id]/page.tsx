@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
+import { StarRating } from "@/components/tasks/StarRating";
 import { TimelineList } from "@/components/tasks/TimelineList";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
@@ -24,7 +25,8 @@ interface TaskDetail {
   nextAction?: string;
   managementDecision?: string;
   lastUpdate?: string;
-  ownerId?: { name: string };
+  performanceScore?: number | null;
+  ownerId?: { name: string; role?: string };
   departmentId?: { name: string };
 }
 
@@ -52,19 +54,20 @@ export default function TeamTaskDetailPage() {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [updates, setUpdates] = useState<UpdateRow[]>([]);
   const [order, setOrder] = useState("");
+  const [score, setScore] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const t = await apiGet<TaskDetail>(`/api/tasks/${params.id}`);
+    const [t, u] = await Promise.all([
+      apiGet<TaskDetail>(`/api/tasks/${params.id}`),
+      apiGet<UpdateRow[]>(`/api/updates?taskId=${params.id}`).catch(() => []),
+    ]);
     setTask(t);
     setOrder(t.nextAction || "");
-    try {
-      setUpdates(await apiGet<UpdateRow[]>(`/api/updates?taskId=${params.id}`));
-    } catch {
-      setUpdates([]);
-    }
+    if (t.performanceScore != null) setScore(t.performanceScore);
+    setUpdates(u);
   }, [params.id]);
 
   useEffect(() => {
@@ -81,6 +84,7 @@ export default function TeamTaskDetailPage() {
   });
 
   const closed = task?.status === "مكتملة" || task?.status === "ملغاة";
+  const needsRating = !closed;
 
   const actions = useMemo(() => {
     if (!task || closed) return { accept: false, reject: false, end: false };
@@ -99,6 +103,10 @@ export default function TeamTaskDetailPage() {
 
   async function submitDecision(decision: Decision) {
     if (!task) return;
+    if (decision === "ended" && needsRating && score == null) {
+      setError("اختر تقييم الأداء من 1 إلى 10 قبل إنهاء المهمة");
+      return;
+    }
     setBusy(true);
     setError("");
     setMessage("");
@@ -106,6 +114,9 @@ export default function TeamTaskDetailPage() {
       await apiSend(`/api/tasks/${task._id}/approve`, "POST", {
         decision,
         notes: order,
+        ...(decision === "ended" && needsRating
+          ? { performanceScore: score }
+          : {}),
       });
       if (decision === "note") setMessage("تم حفظ القرار / الأمر");
       if (decision === "approved") setMessage("تم قبول المهمة");
@@ -168,6 +179,12 @@ export default function TeamTaskDetailPage() {
             <Detail label="الاستحقاق" value={formatDate(task.targetDate)} />
             <Detail label="آخر تحديث" value={formatDate(task.lastUpdate)} />
             <Detail label="الإنجاز" value={formatPercent(task.progress)} />
+            {task.performanceScore != null ? (
+              <Detail
+                label="تقييم الأداء"
+                value={`${task.performanceScore}/10`}
+              />
+            ) : null}
           </div>
           <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-4">
             <div className="text-xs font-semibold text-teal-800">
@@ -205,6 +222,16 @@ export default function TeamTaskDetailPage() {
               حفظ القرار / الأمر
             </button>
           </form>
+
+          {needsRating || task.performanceScore != null ? (
+            <StarRating
+              value={task.performanceScore ?? score}
+              onChange={needsRating ? setScore : undefined}
+              disabled={closed || busy || !needsRating}
+              label="تقييم أداء الموظف (من 1 إلى 10)"
+            />
+          ) : null}
+
           {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
           {message ? <p className="text-sm text-[var(--ok)]">{message}</p> : null}
           {!closed ? (
@@ -224,7 +251,7 @@ export default function TeamTaskDetailPage() {
                   type="button"
                   className="btn btn-primary"
                   style={{ background: "var(--ok)" }}
-                  disabled={busy}
+                  disabled={busy || (needsRating && score == null)}
                   onClick={() => submitDecision("ended")}
                 >
                   إنهاء المهمة

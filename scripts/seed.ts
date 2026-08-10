@@ -39,6 +39,13 @@ async function seed() {
 
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, 12);
 
+  const generalManager = await User.create({
+    name: "المدير العام",
+    email: "gm@alhadara.com",
+    passwordHash,
+    role: "general_manager",
+  });
+
   const ceo = await User.create({
     name: "المدير التنفيذي",
     email: "ceo@alhadara.com",
@@ -304,9 +311,11 @@ async function seed() {
 
   console.log("Seed completed successfully");
   console.log(`\nDemo logins (password: ${SEED_PASSWORD}):`);
+  console.log("  GM:       gm@alhadara.com");
   console.log("  CEO:      ceo@alhadara.com");
   console.log("  Manager: procurement@alhadara.com");
   console.log("  Employee: iris@alhadara.com");
+  console.log(`  GM id: ${generalManager._id}`);
   console.log(`  CEO id: ${ceo._id}`);
 
   await mongoose.disconnect();

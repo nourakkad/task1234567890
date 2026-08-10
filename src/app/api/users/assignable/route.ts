@@ -10,14 +10,18 @@ export async function GET() {
 
     let filter: Record<string, unknown> = { active: true };
 
-    if (user.role === "ceo") {
-      // CEO assigns tasks to managers only
+    if (user.role === "general_manager") {
+      // GM assigns to CEO and managers
+      filter = {
+        active: true,
+        role: { $in: ["ceo", "manager"] },
+      };
+    } else if (user.role === "ceo") {
       filter = {
         active: true,
         role: "manager",
       };
     } else if (user.role === "manager") {
-      // Manager assigns tasks to employees only
       filter = {
         active: true,
         role: "employee",
@@ -30,7 +34,7 @@ export async function GET() {
     const users = await User.find(filter)
       .select("name email role departmentId managerId")
       .populate("departmentId", "name")
-      .sort({ name: 1 })
+      .sort({ role: 1, name: 1 })
       .lean();
 
     return jsonOk(users);

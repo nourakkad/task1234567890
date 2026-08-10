@@ -21,25 +21,38 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
 
-    const taskFilter = await getVisibleTaskFilter(user);
-    const visibleTasks = await Task.find(taskFilter).select("_id");
-    const visibleIds = visibleTasks.map((t) => t._id);
-
-    const filter: Record<string, unknown> = { taskId: { $in: visibleIds } };
+    // Fast path: single task detail — avoid loading all visible task IDs
     if (taskId) {
       if (!Types.ObjectId.isValid(taskId)) {
         return jsonError("معرّف مهمة غير صالح");
       }
-      if (!visibleIds.some((id) => id.toString() === taskId)) {
+      const task = await Task.findById(taskId).select(
+        "ownerId departmentId status"
+      );
+      if (!task) return jsonError("المهمة غير موجودة", 404);
+      const teamIds =
+        user.role === "manager" ? await getTeamMemberIds(user.id) : [];
+      if (!canAccessTask(user, task, teamIds)) {
         return jsonError("غير مصرح", 403);
       }
-      filter.taskId = taskId;
+      const updates = await DailyUpdate.find({ taskId })
+        .populate("taskId", "taskNo name")
+        .populate("createdBy", "name email role")
+        .sort({ createdAt: -1, date: -1 })
+        .limit(100)
+        .lean();
+      return jsonOk(updates);
     }
 
-    const updates = await DailyUpdate.find(filter)
+    const taskFilter = await getVisibleTaskFilter(user);
+    const visibleTasks = await Task.find(taskFilter).select("_id").lean();
+    const visibleIds = visibleTasks.map((t) => t._id);
+
+    const updates = await DailyUpdate.find({ taskId: { $in: visibleIds } })
       .populate("taskId", "taskNo name")
       .populate("createdBy", "name email role")
       .sort({ createdAt: -1, date: -1 })
+      .limit(100)
       .lean();
 
     return jsonOk(updates);
@@ -87,7 +100,6 @@ export async function POST(request: Request) {
       if (statusError) return jsonError(statusError, 400);
     }
 
-    // entryType is never client-controlled — derive from role for normal updates
     const entryType = "update" as const;
 
     const updateNo = await nextUpdateNo();

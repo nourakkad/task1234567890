@@ -39,7 +39,10 @@ const APPROVAL_LABEL: Record<string, string> = {
 
 function messageStyle(role?: string, entryType?: string) {
   if (
+    role === "general_manager" ||
     role === "ceo" ||
+    entryType === "gm_order" ||
+    entryType === "gm_decision" ||
     entryType === "ceo_order" ||
     entryType === "ceo_decision"
   ) {

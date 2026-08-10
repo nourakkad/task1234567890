@@ -12,7 +12,7 @@ import { User } from "@/models/User";
 import type { UserRole } from "@/constants/lookups";
 
 const SESSION_MAX_AGE_SEC = 8 * 60 * 60; // 8 hours
-const TOKEN_REFRESH_MS = 5 * 60 * 1000; // re-check DB at most every 5 min
+const TOKEN_REFRESH_MS = 15 * 60 * 1000; // re-check DB at most every 15 min
 
 export const authOptions: NextAuthOptions = {
   secret: getAuthSecret(),

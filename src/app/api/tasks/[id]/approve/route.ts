@@ -6,9 +6,14 @@ import {
   canApproveTask,
   getTeamMemberIds,
 } from "@/lib/permissions";
+import {
+  parsePerformanceScore,
+  ratingRequiredOnEnd,
+} from "@/lib/performance";
 import { requireSessionUser } from "@/lib/session";
 import { addTimelineEntry } from "@/lib/timeline";
 import { Task } from "@/models/Task";
+import { User } from "@/models/User";
 
 type Params = { params: Promise<{ id: string }> };
 type Decision = "approved" | "rejected" | "ended" | "note";
@@ -46,7 +51,7 @@ export async function POST(request: Request, { params }: Params) {
     }
 
     if (note) {
-      if (user.role === "ceo") {
+      if (user.role === "general_manager" || user.role === "ceo") {
         task.managementDecision = note;
         task.nextAction = note;
       } else if (user.role === "manager") {
@@ -56,7 +61,15 @@ export async function POST(request: Request, { params }: Params) {
 
     if (decision === "note") {
       if (!note) return jsonError("أدخل القرار أو الأمر أولاً");
-      if (user.role === "ceo") {
+      if (user.role === "general_manager") {
+        await addTimelineEntry({
+          taskId: task._id.toString(),
+          createdBy: user.id,
+          text: note,
+          entryType: "gm_order",
+          result: "أمر / قرار من المدير العام",
+        });
+      } else if (user.role === "ceo") {
         await addTimelineEntry({
           taskId: task._id.toString(),
           createdBy: user.id,
@@ -100,17 +113,55 @@ export async function POST(request: Request, { params }: Params) {
     }
 
     if (decision === "ended") {
-      if (user.role !== "ceo" && user.role !== "manager") {
+      if (
+        user.role !== "general_manager" &&
+        user.role !== "ceo" &&
+        user.role !== "manager"
+      ) {
         return jsonError("غير مصرح بإنهاء المهمة", 403);
       }
+
+      const owner = await User.findById(task.ownerId).select("role managerId");
+      const ownerRole = owner?.role;
+
+      if (ratingRequiredOnEnd(user, ownerRole)) {
+        if (user.role === "manager") {
+          const ownerId = task.ownerId.toString();
+          if (!teamIds.includes(ownerId)) {
+            return jsonError("لا يمكن تقييم موظف خارج فريقك", 403);
+          }
+        }
+        if (task.performanceScore != null) {
+          return jsonError("تم تقييم هذه المهمة مسبقًا", 400);
+        }
+        const score = parsePerformanceScore(body.performanceScore);
+        if (score == null) {
+          return jsonError("يجب اختيار تقييم من 1 إلى 10 عند إنهاء المهمة", 400);
+        }
+        task.performanceScore = score;
+        task.performanceRatedById = new Types.ObjectId(user.id);
+        task.performanceRatedAt = new Date();
+      }
+
       task.managerApproval = "approved";
       task.status = "مكتملة";
       task.progress = 1;
       task.closureDate = new Date();
-      decisionLabel = "إنهاء المهمة";
+      decisionLabel =
+        task.performanceScore != null
+          ? `إنهاء المهمة — تقييم ${task.performanceScore}/10`
+          : "إنهاء المهمة";
     }
 
-    if (user.role === "ceo") {
+    if (user.role === "general_manager") {
+      await addTimelineEntry({
+        taskId: task._id.toString(),
+        createdBy: user.id,
+        text: note || decisionLabel,
+        entryType: "gm_decision",
+        result: decisionLabel,
+      });
+    } else if (user.role === "ceo") {
       await addTimelineEntry({
         taskId: task._id.toString(),
         createdBy: user.id,

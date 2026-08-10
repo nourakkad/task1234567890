@@ -25,6 +25,9 @@ export interface ITask {
   folderLink?: string;
   closureDate?: Date | null;
   managerApproval: ManagerApproval;
+  performanceScore?: number | null;
+  performanceRatedById?: Types.ObjectId | null;
+  performanceRatedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,11 +76,23 @@ const TaskSchema = new Schema<ITask>(
       enum: ["pending", "approved", "rejected"],
       default: "pending",
     },
+    performanceScore: { type: Number, default: null, min: 1, max: 10 },
+    performanceRatedById: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    performanceRatedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
 TaskSchema.index({ departmentId: 1, status: 1 });
 TaskSchema.index({ ownerId: 1 });
+TaskSchema.index({ ownerId: 1, status: 1 });
+TaskSchema.index({ ownerId: 1, performanceRatedAt: 1 });
+TaskSchema.index({ assignedById: 1, ownerId: 1 });
+TaskSchema.index({ updatedAt: -1 });
+TaskSchema.index({ status: 1, targetDate: 1 });
 
 export const Task = models.Task || model<ITask>("Task", TaskSchema);

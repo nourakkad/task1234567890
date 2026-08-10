@@ -35,13 +35,21 @@ export async function PATCH(request: Request, { params }: Params) {
 
     // Append-only content: employees/managers can only add manager notes or minor edits by creator/manager
     if (body.managerNotes !== undefined) {
-      if (user.role !== "ceo" && user.role !== "manager") {
+      if (
+        user.role !== "general_manager" &&
+        user.role !== "ceo" &&
+        user.role !== "manager"
+      ) {
         return jsonError("فقط المدير يضيف ملاحظات", 403);
       }
       update.managerNotes = body.managerNotes;
     }
 
-    if (user.role === "ceo" || update.createdBy.toString() === user.id) {
+    if (
+      user.role === "general_manager" ||
+      user.role === "ceo" ||
+      update.createdBy.toString() === user.id
+    ) {
       const editable = [
         "workPerformed",
         "supplier",

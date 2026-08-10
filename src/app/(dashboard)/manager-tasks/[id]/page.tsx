@@ -91,14 +91,12 @@ export default function ManagerTaskDetailPage() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const t = await apiGet<TaskDetail>(`/api/tasks/${params.id}`);
+    const [t, u] = await Promise.all([
+      apiGet<TaskDetail>(`/api/tasks/${params.id}`),
+      apiGet<UpdateRow[]>(`/api/updates?taskId=${params.id}`).catch(() => []),
+    ]);
     setTask(t);
-    try {
-      const u = await apiGet<UpdateRow[]>(`/api/updates?taskId=${params.id}`);
-      setUpdates(u);
-    } catch {
-      setUpdates([]);
-    }
+    setUpdates(u);
   }, [params.id]);
 
   useAutoRefresh(() => load().catch(() => undefined), {

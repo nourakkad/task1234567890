@@ -23,7 +23,7 @@ const UserSchema = new Schema<IUser>(
     passwordHash: { type: String, required: true },
     role: {
       type: String,
-      enum: ["ceo", "manager", "employee"],
+      enum: ["general_manager", "ceo", "manager", "employee"],
       required: true,
     },
     departmentId: { type: Schema.Types.ObjectId, ref: "Department", default: null },
@@ -34,5 +34,8 @@ const UserSchema = new Schema<IUser>(
   },
   { timestamps: true }
 );
+
+UserSchema.index({ role: 1, active: 1 });
+UserSchema.index({ managerId: 1, role: 1, active: 1 });
 
 export const User = models.User || model<IUser>("User", UserSchema);

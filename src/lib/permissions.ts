@@ -12,28 +12,50 @@ export interface SessionUser {
   managerId?: string | null;
 }
 
+/** General Manager or CEO — org-wide leadership */
+export function isLeadership(role: UserRole) {
+  return role === "general_manager" || role === "ceo";
+}
+
 export function canManageTeam(role: UserRole) {
   return role === "ceo" || role === "manager";
 }
 
 export function canCreateTask(role: UserRole) {
-  return role === "ceo" || role === "manager";
+  return (
+    role === "general_manager" || role === "ceo" || role === "manager"
+  );
 }
 
 export function canApproveTask(role: UserRole) {
-  return role === "ceo" || role === "manager";
+  return (
+    role === "general_manager" || role === "ceo" || role === "manager"
+  );
 }
 
 export function canSetManagementDecision(role: UserRole) {
-  return role === "ceo";
+  return role === "general_manager" || role === "ceo";
 }
 
 export function canDeleteUpdate(role: UserRole) {
+  return role === "general_manager" || role === "ceo";
+}
+
+export function canDeleteTask(role: UserRole) {
   return role === "ceo";
 }
 
+export function canTrackEmployees(role: UserRole) {
+  return role === "general_manager" || role === "ceo";
+}
+
+export function canTrackManagers(role: UserRole) {
+  return role === "general_manager" || role === "ceo";
+}
+
 export async function getVisibleTaskFilter(user: SessionUser) {
-  if (user.role === "ceo") return {};
+  // GM and CEO see everything
+  if (user.role === "general_manager" || user.role === "ceo") return {};
 
   if (user.role === "manager") {
     const employees = await User.find({
@@ -74,7 +96,7 @@ export function canAccessTask(
   task: ITask | { ownerId?: unknown; departmentId?: unknown },
   teamIds: string[]
 ) {
-  if (user.role === "ceo") return true;
+  if (user.role === "general_manager" || user.role === "ceo") return true;
 
   const ownerId = refId(task.ownerId);
   const departmentId = refId(task.departmentId);
@@ -104,7 +126,7 @@ export async function getTeamMemberIds(managerId: string): Promise<string[]> {
 }
 
 export function canEditTask(user: SessionUser, task: ITask, teamIds: string[]) {
-  if (user.role === "ceo") return true;
+  if (user.role === "general_manager" || user.role === "ceo") return true;
   if (user.role === "manager") {
     return canAccessTask(user, task, teamIds);
   }

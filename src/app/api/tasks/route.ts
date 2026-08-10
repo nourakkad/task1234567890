@@ -26,18 +26,24 @@ export async function GET(request: Request) {
     const teamAssigned = searchParams.get("teamAssigned") === "1";
     const employeeTasks = searchParams.get("employeeTasks") === "1";
     const managerTasks = searchParams.get("managerTasks") === "1";
+    const leadershipTasks = searchParams.get("leadershipTasks") === "1";
+    const fromLeadership = searchParams.get("fromLeadership") === "1";
 
     let filter: Record<string, unknown> = await getVisibleTaskFilter(user);
 
-    if (fromCeo) {
-      if (user.role !== "manager") {
-        return jsonError("هذه الصفحة للمدراء فقط", 403);
+    if (fromCeo || fromLeadership) {
+      // CEO inbox (from GM) or manager inbox (from CEO/GM)
+      if (user.role !== "manager" && user.role !== "ceo") {
+        return jsonError("غير مصرح", 403);
       }
 
-      // Manager inbox: tasks owned by them OR in their department
       const ownerOid = new Types.ObjectId(user.id);
       const or: Record<string, unknown>[] = [{ ownerId: ownerOid }];
-      if (user.departmentId && Types.ObjectId.isValid(user.departmentId)) {
+      if (
+        user.role === "manager" &&
+        user.departmentId &&
+        Types.ObjectId.isValid(user.departmentId)
+      ) {
         or.push({ departmentId: new Types.ObjectId(user.departmentId) });
       }
       filter = { $or: or };
@@ -62,8 +68,8 @@ export async function GET(request: Request) {
     }
 
     if (employeeTasks) {
-      if (user.role !== "ceo") {
-        return jsonError("هذه الصفحة للمدير التنفيذي فقط", 403);
+      if (user.role !== "ceo" && user.role !== "general_manager") {
+        return jsonError("غير مصرح", 403);
       }
       const employees = await User.find({
         role: "employee",
@@ -75,8 +81,9 @@ export async function GET(request: Request) {
     }
 
     if (managerTasks) {
+      // CEO tracks managers only
       if (user.role !== "ceo") {
-        return jsonError("هذه الصفحة للمدير التنفيذي فقط", 403);
+        return jsonError("غير مصرح", 403);
       }
       const managers = await User.find({
         role: "manager",
@@ -84,6 +91,20 @@ export async function GET(request: Request) {
       }).select("_id");
       filter = {
         ownerId: { $in: managers.map((m) => m._id) },
+      };
+    }
+
+    if (leadershipTasks) {
+      // GM tracks CEO + managers
+      if (user.role !== "general_manager") {
+        return jsonError("هذه الصفحة للمدير العام فقط", 403);
+      }
+      const leaders = await User.find({
+        role: { $in: ["ceo", "manager"] },
+        active: true,
+      }).select("_id");
+      filter = {
+        ownerId: { $in: leaders.map((m) => m._id) },
       };
     }
 
@@ -123,26 +144,44 @@ export async function GET(request: Request) {
     >();
 
     if (taskIds.length > 0) {
-      const recent = await DailyUpdate.find({ taskId: { $in: taskIds } })
-        .populate("createdBy", "name role")
-        .sort({ createdAt: -1, date: -1 })
-        .lean();
+      const recent = await DailyUpdate.aggregate([
+        { $match: { taskId: { $in: taskIds } } },
+        { $sort: { createdAt: -1, date: -1 } },
+        {
+          $group: {
+            _id: "$taskId",
+            text: { $first: "$workPerformed" },
+            createdAt: { $first: "$createdAt" },
+            date: { $first: "$date" },
+            entryType: { $first: "$entryType" },
+            createdBy: { $first: "$createdBy" },
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "createdBy",
+            foreignField: "_id",
+            as: "sender",
+          },
+        },
+        {
+          $unwind: {
+            path: "$sender",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+      ]);
 
       for (const entry of recent) {
-        const key = String(entry.taskId);
-        if (latestByTask.has(key)) continue;
-        const sender = entry.createdBy as
-          | { name?: string; role?: UserRole }
-          | null
-          | undefined;
-        const role = sender?.role || "employee";
-        latestByTask.set(key, {
-          text: entry.workPerformed,
+        const role = (entry.sender?.role as UserRole) || "employee";
+        latestByTask.set(String(entry._id), {
+          text: entry.text,
           date: entry.createdAt || entry.date,
           entryType: entry.entryType,
-          senderName: sender?.name || "—",
+          senderName: entry.sender?.name || "—",
           senderRole: role,
-          senderRoleLabel: ROLE_LABELS[role as UserRole] || role,
+          senderRoleLabel: ROLE_LABELS[role] || role,
         });
       }
     }
@@ -168,16 +207,43 @@ export async function POST(request: Request) {
     await connectDB();
     const body = await request.json();
 
-    if (!body.name || !body.ownerId || !body.departmentId) {
-      return jsonError("الاسم والمسؤول والقسم مطلوبة");
+    if (!body.name || !body.ownerId) {
+      return jsonError("الاسم والمسؤول مطلوبان");
     }
 
     const owner = await User.findById(body.ownerId);
     if (!owner) return jsonError("المسؤول غير موجود", 404);
 
+    if (user.role === "general_manager") {
+      if (owner.role !== "ceo" && owner.role !== "manager") {
+        return jsonError(
+          "المدير العام يسند المهام للمدير التنفيذي والمدراء فقط",
+          403
+        );
+      }
+      if (owner.role === "manager") {
+        if (!body.departmentId) {
+          return jsonError("يجب اختيار قسم للمدير");
+        }
+        if (
+          owner.departmentId &&
+          body.departmentId !== owner.departmentId.toString()
+        ) {
+          return jsonError("يجب أن تطابق المهمة قسم المدير المختار", 403);
+        }
+      }
+      // CEO may have no department — optional
+      if (!body.managementDecision && !body.nextAction) {
+        return jsonError("أدخل القرار أو الأمر");
+      }
+    }
+
     if (user.role === "ceo") {
       if (owner.role !== "manager") {
         return jsonError("المدير التنفيذي يسند المهام للمدراء فقط", 403);
+      }
+      if (!body.departmentId) {
+        return jsonError("الاسم والمسؤول والقسم مطلوبة");
       }
       if (
         owner.departmentId &&
@@ -190,6 +256,9 @@ export async function POST(request: Request) {
     if (user.role === "manager") {
       if (owner.role !== "employee") {
         return jsonError("المدير يسند المهام للموظفين فقط", 403);
+      }
+      if (!body.departmentId) {
+        return jsonError("الاسم والمسؤول والقسم مطلوبة");
       }
       const isTeam =
         owner.managerId?.toString() === user.id ||
@@ -205,8 +274,13 @@ export async function POST(request: Request) {
       }
     }
 
-    const dept = await Department.findById(body.departmentId);
-    if (!dept) return jsonError("القسم غير موجود", 404);
+    let departmentId = body.departmentId || null;
+    if (departmentId) {
+      const dept = await Department.findById(departmentId);
+      if (!dept) return jsonError("القسم غير موجود", 404);
+    } else if (owner.role === "manager" || owner.role === "employee") {
+      return jsonError("القسم مطلوب لهذا المسؤول");
+    }
 
     const taskNo = await nextTaskNo();
     const task = await Task.create({
@@ -218,7 +292,7 @@ export async function POST(request: Request) {
         : new Date(),
       targetDate: body.targetDate ? new Date(body.targetDate) : null,
       ownerId: body.ownerId,
-      departmentId: body.departmentId,
+      departmentId,
       assignedById: user.id,
       priority: body.priority || "متوسطة",
       status: body.status || "لم تبدأ",
@@ -231,6 +305,19 @@ export async function POST(request: Request) {
       folderLink: body.folderLink || "",
       lastUpdate: new Date(),
     });
+
+    if (
+      user.role === "general_manager" &&
+      (body.managementDecision || body.nextAction)
+    ) {
+      await addTimelineEntry({
+        taskId: task._id.toString(),
+        createdBy: user.id,
+        text: body.managementDecision || body.nextAction,
+        entryType: "gm_order",
+        result: "أمر التكليف من المدير العام",
+      });
+    }
 
     if (user.role === "ceo" && (body.managementDecision || body.nextAction)) {
       await addTimelineEntry({

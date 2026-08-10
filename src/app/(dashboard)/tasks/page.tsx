@@ -16,11 +16,13 @@ export default function TasksPage() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const role = session?.user?.role;
-  const canCreate = role === "ceo" || role === "manager";
+  const canCreate =
+    role === "general_manager" || role === "ceo" || role === "manager";
+  const isLeadership = role === "general_manager" || role === "ceo";
 
   useEffect(() => {
     if (authStatus === "loading") return;
-    if (role === "ceo") {
+    if (isLeadership) {
       router.replace("/track");
       return;
     }
@@ -29,9 +31,9 @@ export default function TasksPage() {
     apiGet<TaskCardData[]>(`/api/tasks${qs}`)
       .then(setTasks)
       .catch((e) => setError(e.message));
-  }, [authStatus, role, status, router]);
+  }, [authStatus, isLeadership, status, router]);
 
-  if (authStatus === "loading" || role === "ceo") {
+  if (authStatus === "loading" || isLeadership) {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;
   }
 
