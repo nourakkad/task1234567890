@@ -1,0 +1,187 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { useSuccessToast } from "@/components/SuccessToast";
+import {
+  countOfflineActions,
+  enqueueOfflineAction,
+  flushOfflineQueue,
+  isBrowserOnline,
+  isNetworkError,
+  listOfflineActions,
+  OFFLINE_QUEUE_EVENT,
+  type OfflineAction,
+  type OfflineActionType,
+} from "@/lib/offlineQueue";
+import { emitNotificationsUpdate } from "@/hooks/useLiveNotifications";
+
+type EnqueueInput = {
+  type: OfflineActionType;
+  label: string;
+  payload: Record<string, unknown>;
+};
+
+type OfflineSyncContextValue = {
+  online: boolean;
+  pendingCount: number;
+  pending: OfflineAction[];
+  syncing: boolean;
+  enqueue: (input: EnqueueInput) => Promise<void>;
+  /** Try live send; on offline/network error queue instead. */
+  sendOrQueue: <T>(opts: {
+    label: string;
+    type: OfflineActionType;
+    payload: Record<string, unknown>;
+    send: () => Promise<T>;
+  }) => Promise<{ queued: boolean; data?: T }>;
+  flushNow: () => Promise<void>;
+  refresh: () => Promise<void>;
+};
+
+const OfflineSyncContext = createContext<OfflineSyncContextValue | null>(null);
+
+export function OfflineSyncProvider({ children }: { children: ReactNode }) {
+  const showSuccess = useSuccessToast();
+  const [online, setOnline] = useState(true);
+  const [pending, setPending] = useState<OfflineAction[]>([]);
+  const [syncing, setSyncing] = useState(false);
+
+  const refresh = useCallback(async () => {
+    const rows = await listOfflineActions();
+    setPending(rows);
+  }, []);
+
+  const flushNow = useCallback(async () => {
+    if (!isBrowserOnline()) return;
+    setSyncing(true);
+    try {
+      const result = await flushOfflineQueue();
+      await refresh();
+      if (result.sent > 0) {
+        showSuccess(
+          result.sent === 1
+            ? "تم إرسال العملية المحفوظة"
+            : `تم إرسال ${result.sent} عمليات محفوظة`
+        );
+        emitNotificationsUpdate();
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }, [refresh, showSuccess]);
+
+  const enqueue = useCallback(
+    async (input: EnqueueInput) => {
+      await enqueueOfflineAction(input);
+      await refresh();
+      showSuccess("تم الحفظ على الجهاز — سيُرسل عند توفر الإنترنت");
+    },
+    [refresh, showSuccess]
+  );
+
+  const sendOrQueue = useCallback(
+    async <T,>(opts: {
+      label: string;
+      type: OfflineActionType;
+      payload: Record<string, unknown>;
+      send: () => Promise<T>;
+    }) => {
+      if (!isBrowserOnline()) {
+        await enqueue({
+          type: opts.type,
+          label: opts.label,
+          payload: opts.payload,
+        });
+        return { queued: true as const };
+      }
+      try {
+        const data = await opts.send();
+        return { queued: false as const, data };
+      } catch (err) {
+        if (isNetworkError(err) || !isBrowserOnline()) {
+          await enqueue({
+            type: opts.type,
+            label: opts.label,
+            payload: opts.payload,
+          });
+          return { queued: true as const };
+        }
+        throw err;
+      }
+    },
+    [enqueue]
+  );
+
+  useEffect(() => {
+    setOnline(isBrowserOnline());
+    void refresh();
+
+    const onOnline = () => {
+      setOnline(true);
+      void flushNow();
+    };
+    const onOffline = () => setOnline(false);
+    const onQueue = () => void refresh();
+
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener(OFFLINE_QUEUE_EVENT, onQueue);
+
+    // Initial flush if anything pending and online
+    if (isBrowserOnline()) {
+      void countOfflineActions().then((n) => {
+        if (n > 0) void flushNow();
+      });
+    }
+
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener(OFFLINE_QUEUE_EVENT, onQueue);
+    };
+  }, [flushNow, refresh]);
+
+  const value = useMemo<OfflineSyncContextValue>(
+    () => ({
+      online,
+      pendingCount: pending.length,
+      pending,
+      syncing,
+      enqueue,
+      sendOrQueue,
+      flushNow,
+      refresh,
+    }),
+    [
+      online,
+      pending,
+      syncing,
+      enqueue,
+      sendOrQueue,
+      flushNow,
+      refresh,
+    ]
+  );
+
+  return (
+    <OfflineSyncContext.Provider value={value}>
+      {children}
+    </OfflineSyncContext.Provider>
+  );
+}
+
+export function useOfflineSync() {
+  const ctx = useContext(OfflineSyncContext);
+  if (!ctx) {
+    throw new Error("useOfflineSync must be used within OfflineSyncProvider");
+  }
+  return ctx;
+}

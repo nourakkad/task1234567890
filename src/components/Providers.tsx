@@ -1,6 +1,7 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
+import { OfflineSyncProvider } from "@/components/OfflineSyncProvider";
 import { SuccessToastProvider } from "@/components/SuccessToast";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -10,7 +11,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       refetchOnWindowFocus={true}
       refetchInterval={5 * 60}
     >
-      <SuccessToastProvider>{children}</SuccessToastProvider>
+      <SuccessToastProvider>
+        <OfflineSyncProvider>{children}</OfflineSyncProvider>
+      </SuccessToastProvider>
     </SessionProvider>
   );
 }

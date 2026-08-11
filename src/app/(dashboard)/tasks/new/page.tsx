@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AssigneePicker } from "@/components/AssigneePicker";
 import { PageHeader } from "@/components/PageHeader";
+import { useOfflineSync } from "@/components/OfflineSyncProvider";
 import { useSuccessToast } from "@/components/SuccessToast";
 import { apiGet, apiSend } from "@/lib/client";
 
@@ -36,6 +37,7 @@ function userDeptId(user?: AssignableUser | null): string {
 export default function NewTaskPage() {
   const router = useRouter();
   const showSuccess = useSuccessToast();
+  const { sendOrQueue } = useOfflineSync();
   const { data: session, status: authStatus } = useSession();
   const role = session?.user?.role;
   const isGm = role === "general_manager";
@@ -244,7 +246,7 @@ export default function NewTaskPage() {
     setLoading(true);
     setError("");
     try {
-      const task = await apiSend<{ _id: string }>("/api/tasks", "POST", {
+      const payload = {
         name: form.name.trim(),
         description: form.description.trim(),
         ownerId: form.ownerId,
@@ -256,7 +258,30 @@ export default function NewTaskPage() {
         managementDecision: isGm || isCeo ? orderText : "",
         nextAction: orderText,
         progress: 0,
+      };
+      const result = await sendOrQueue<{ _id: string }>({
+        type: "create_task",
+        label: `إسناد مهمة: ${payload.name}`,
+        payload,
+        send: () => apiSend<{ _id: string }>("/api/tasks", "POST", payload),
       });
+
+      if (result.queued) {
+        setForm({
+          name: "",
+          description: "",
+          ownerId: "",
+          departmentId: isManager && managerDeptIds.length === 1
+            ? managerDeptIds[0]
+            : "",
+          targetDate: "",
+          managementDecision: "",
+        });
+        setLoading(false);
+        return;
+      }
+
+      const task = result.data!;
       showSuccess("تم إضافة المهمة بنجاح");
       if (isGm) router.push(`/track/${task._id}`);
       else if (isCeo) router.push(`/track/${task._id}`);

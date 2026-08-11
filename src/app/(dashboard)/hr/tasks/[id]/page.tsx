@@ -10,6 +10,7 @@ import {
   TimelineList,
   type TimelineItem,
 } from "@/components/tasks/TimelineList";
+import { useOfflineSync } from "@/components/OfflineSyncProvider";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
@@ -43,6 +44,7 @@ export default function HrTaskDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { data: session, status: authStatus } = useSession();
+  const { sendOrQueue } = useOfflineSync();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [updates, setUpdates] = useState<TimelineItem[]>([]);
   const [updateText, setUpdateText] = useState("");
@@ -130,17 +132,27 @@ export default function HrTaskDetailPage() {
     setError("");
     setMessage("");
     try {
-      await apiSend("/api/updates", "POST", {
+      const payload = {
         taskId: task._id,
         workPerformed: text,
         result: opts?.result || "",
         nextAction: task.nextAction || "",
         status: opts?.status,
         date: new Date().toISOString().slice(0, 10),
+      };
+      const result = await sendOrQueue({
+        type: "create_update",
+        label: `تحديث على ${task.taskNo}`,
+        payload,
+        send: () => apiSend("/api/updates", "POST", payload),
       });
       setUpdateText("");
-      setMessage("تم حفظ التحديث");
-      await load();
+      if (result.queued) {
+        setMessage("تم حفظ التحديث على الجهاز — سيُرسل عند توفر الإنترنت");
+      } else {
+        setMessage("تم حفظ التحديث");
+        await load();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل حفظ التحديث");
     } finally {

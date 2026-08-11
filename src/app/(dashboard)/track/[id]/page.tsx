@@ -19,6 +19,7 @@ import {
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import { StarRating } from "@/components/tasks/StarRating";
 import { TimelineList } from "@/components/tasks/TimelineList";
+import { useOfflineSync } from "@/components/OfflineSyncProvider";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
@@ -80,6 +81,7 @@ function TrackDetailInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { data: session } = useSession();
+  const { sendOrQueue } = useOfflineSync();
   const role = session?.user?.role;
   const isLeadership = role === "general_manager" || role === "ceo";
   const canDelete = role === "ceo" || role === "general_manager";
@@ -146,17 +148,35 @@ function TrackDetailInner() {
     setError("");
     setMessage("");
     try {
-      const updated = await apiSend<TaskDetail>(
-        `/api/tasks/${task._id}/approve`,
-        "POST",
-        {
-          decision,
-          notes: order,
-          ...(decision === "ended" && needsRating
-            ? { performanceScore: score }
-            : {}),
-        }
-      );
+      const payload = {
+        decision,
+        notes: order,
+        taskId: task._id,
+        ...(decision === "ended" && needsRating
+          ? { performanceScore: score }
+          : {}),
+      };
+      const result = await sendOrQueue<TaskDetail>({
+        type: "task_decision",
+        label: `قرار على ${task.taskNo}`,
+        payload,
+        send: () =>
+          apiSend<TaskDetail>(`/api/tasks/${task._id}/approve`, "POST", {
+            decision,
+            notes: order,
+            ...(decision === "ended" && needsRating
+              ? { performanceScore: score }
+              : {}),
+          }),
+      });
+
+      if (result.queued) {
+        setOrder("");
+        setMessage("تم حفظ القرار على الجهاز — سيُرسل عند توفر الإنترنت");
+        return;
+      }
+
+      const updated = result.data!;
       setTask(updated);
       if (decision === "note") {
         setOrder("");

@@ -8,6 +8,7 @@ import { signOut, useSession } from "next-auth/react";
 import { ROLE_LABELS } from "@/constants/lookups";
 import { isNavActive, NAV_LINKS } from "@/components/navLinks";
 import { NotificationBell } from "@/components/NotificationBell";
+import { OfflineBanner } from "@/components/OfflineBanner";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -168,6 +169,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="min-h-screen max-w-[100vw] box-border overflow-x-hidden px-4 pb-8 pt-[4.5rem] sm:px-6 lg:ms-64 lg:max-w-none lg:p-8 lg:pt-8">
+        <OfflineBanner />
         {children}
       </main>
     </div>

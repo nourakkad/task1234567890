@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import { TimelineList } from "@/components/tasks/TimelineList";
+import { useOfflineSync } from "@/components/OfflineSyncProvider";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
@@ -86,6 +87,7 @@ const ACTION_META: Record<
 export default function MyTaskDetailPage() {
   const params = useParams<{ id: string }>();
   const { data: session, status: authStatus } = useSession();
+  const { sendOrQueue } = useOfflineSync();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [updates, setUpdates] = useState<UpdateRow[]>([]);
   const [updateText, setUpdateText] = useState("");
@@ -129,17 +131,27 @@ export default function MyTaskDetailPage() {
     setError("");
     setMessage("");
     try {
-      await apiSend("/api/updates", "POST", {
+      const payload = {
         taskId: task._id,
         workPerformed: text,
         result: opts?.result || "",
         nextAction: task.nextAction || "",
         status: opts?.status,
         date: new Date().toISOString().slice(0, 10),
+      };
+      const result = await sendOrQueue({
+        type: "create_update",
+        label: `تحديث على ${task.taskNo}`,
+        payload,
+        send: () => apiSend("/api/updates", "POST", payload),
       });
       setUpdateText("");
-      setMessage("تم حفظ التحديث");
-      await load();
+      if (result.queued) {
+        setMessage("تم حفظ التحديث على الجهاز — سيُرسل عند توفر الإنترنت");
+      } else {
+        setMessage("تم حفظ التحديث");
+        await load();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل حفظ التحديث");
     } finally {

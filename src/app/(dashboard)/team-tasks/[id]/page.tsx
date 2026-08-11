@@ -12,6 +12,7 @@ import {
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import { StarRating } from "@/components/tasks/StarRating";
 import { TimelineList } from "@/components/tasks/TimelineList";
+import { useOfflineSync } from "@/components/OfflineSyncProvider";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
@@ -56,6 +57,7 @@ export default function TeamTaskDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { data: session, status: authStatus } = useSession();
+  const { sendOrQueue } = useOfflineSync();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [updates, setUpdates] = useState<UpdateRow[]>([]);
   const [order, setOrder] = useState("");
@@ -117,13 +119,34 @@ export default function TeamTaskDetailPage() {
     setError("");
     setMessage("");
     try {
-      await apiSend(`/api/tasks/${task._id}/approve`, "POST", {
+      const payload = {
         decision,
         notes: order,
+        taskId: task._id,
         ...(decision === "ended" && needsRating
           ? { performanceScore: score }
           : {}),
+      };
+      const result = await sendOrQueue({
+        type: "task_decision",
+        label: `قرار على ${task.taskNo}`,
+        payload,
+        send: () =>
+          apiSend(`/api/tasks/${task._id}/approve`, "POST", {
+            decision,
+            notes: order,
+            ...(decision === "ended" && needsRating
+              ? { performanceScore: score }
+              : {}),
+          }),
       });
+
+      if (result.queued) {
+        setOrder("");
+        setMessage("تم حفظ القرار على الجهاز — سيُرسل عند توفر الإنترنت");
+        return;
+      }
+
       if (decision === "note") {
         setOrder("");
         setMessage("تم حفظ القرار / الأمر");
