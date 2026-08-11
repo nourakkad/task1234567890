@@ -95,7 +95,7 @@ function filterActiveTasks<T extends TaskLike>(tasks: T[] | null | undefined): T
   return (tasks || []).filter((t) => isActiveTaskStatus(t.status));
 }
 
-type UpdateLike = {
+export type UpdateLike = {
   _id?: unknown;
   updateNo?: unknown;
   date?: string | Date;

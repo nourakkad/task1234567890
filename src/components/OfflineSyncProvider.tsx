@@ -30,6 +30,7 @@ import {
   replaceCachedTasks,
   type CachedAssignee,
   type OfflineActionMode,
+  type UpdateLike,
 } from "@/lib/offlineCatalog";
 import { emitNotificationsUpdate } from "@/hooks/useLiveNotifications";
 
@@ -200,7 +201,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           if (seen.size > PREFETCH_CAP) break;
           const [detail, updates] = await Promise.all([
             fetchJsonQuiet<Record<string, unknown>>(`/api/tasks/${id}`),
-            fetchJsonQuiet<unknown[]>(`/api/updates?taskId=${id}`),
+            fetchJsonQuiet<UpdateLike[]>(`/api/updates?taskId=${id}`),
           ]);
           if (detail) {
             await rememberTaskDetail(
