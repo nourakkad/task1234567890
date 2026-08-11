@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { useSuccessToast } from "@/components/SuccessToast";
 import { emitNotificationsUpdate } from "@/hooks/useLiveNotifications";
@@ -32,10 +33,16 @@ export function NotificationBell({
   const [unreadCount, setUnreadCount] = useState(0);
   const [items, setItems] = useState<NotifItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef<number | null>(null);
   const openRef = useRef(open);
   openRef.current = open;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const announceNew = useCallback(
     async (nextCount: number) => {
@@ -149,7 +156,10 @@ export function NotificationBell({
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -182,6 +192,7 @@ export function NotificationBell({
     }
     setOpen(false);
     if (n.href) router.push(n.href);
+    emitNotificationsUpdate();
   }
 
   async function markAll() {
@@ -195,6 +206,7 @@ export function NotificationBell({
           readAt: x.readAt || new Date().toISOString(),
         }))
       );
+      emitNotificationsUpdate();
     } catch {
       // ignore
     }
@@ -204,6 +216,68 @@ export function NotificationBell({
     variant === "dark"
       ? "relative rounded-xl p-2 text-white/90 hover:bg-white/10"
       : "menu-toggle relative";
+
+  const panel = open ? (
+    <div
+      ref={panelRef}
+      className="fixed z-[70] inset-x-3 top-[4.75rem] max-h-[min(70vh,28rem)] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg-elevated)] text-[var(--ink)] shadow-xl lg:inset-x-auto lg:start-3 lg:top-20 lg:w-[min(22rem,calc(100vw-1.5rem))]"
+      role="dialog"
+      aria-label="الإشعارات"
+    >
+      <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2.5">
+        <div className="font-semibold text-[var(--ink)]">الإشعارات</div>
+        {unreadCount > 0 ? (
+          <button
+            type="button"
+            className="text-xs font-semibold text-[var(--brand)]"
+            onClick={() => void markAll()}
+          >
+            تعليم الكل كمقروء
+          </button>
+        ) : null}
+      </div>
+
+      <div className="max-h-[min(60vh,24rem)] overflow-y-auto">
+        {loading ? (
+          <p className="p-4 text-sm text-[var(--muted)]">جارٍ التحميل...</p>
+        ) : items.length === 0 ? (
+          <p className="p-4 text-sm text-[var(--muted)]">لا إشعارات بعد</p>
+        ) : (
+          items.map((n) => (
+            <button
+              key={n._id}
+              type="button"
+              onClick={() => void markOne(n)}
+              className={`block w-full border-b border-[var(--line)] px-3 py-3 text-start text-[var(--ink)] last:border-0 hover:bg-[var(--brand-soft)] ${
+                n.readAt ? "opacity-70" : ""
+              }`}
+            >
+              <div className="flex items-start gap-2">
+                {!n.readAt ? (
+                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--accent)]" />
+                ) : (
+                  <span className="mt-1.5 h-2 w-2 shrink-0" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-[var(--ink)]">
+                    {n.title}
+                  </div>
+                  {n.body ? (
+                    <div className="mt-0.5 line-clamp-2 text-xs text-[var(--muted)]">
+                      {n.body}
+                    </div>
+                  ) : null}
+                  <div className="mt-1 text-[10px] text-[var(--muted)]">
+                    {formatWhen(n.createdAt)}
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="relative" ref={rootRef}>
@@ -222,66 +296,7 @@ export function NotificationBell({
         ) : null}
       </button>
 
-      {open ? (
-        <div
-          className={`absolute z-[60] mt-2 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg-elevated)] text-[var(--ink)] shadow-xl ${
-            variant === "dark" ? "start-0" : "end-0"
-          }`}
-        >
-          <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2.5">
-            <div className="font-semibold text-[var(--ink)]">الإشعارات</div>
-            {unreadCount > 0 ? (
-              <button
-                type="button"
-                className="text-xs font-semibold text-[var(--brand)]"
-                onClick={() => void markAll()}
-              >
-                تعليم الكل كمقروء
-              </button>
-            ) : null}
-          </div>
-
-          <div className="max-h-[min(24rem,60vh)] overflow-y-auto">
-            {loading ? (
-              <p className="p-4 text-sm text-[var(--muted)]">جارٍ التحميل...</p>
-            ) : items.length === 0 ? (
-              <p className="p-4 text-sm text-[var(--muted)]">لا إشعارات بعد</p>
-            ) : (
-              items.map((n) => (
-                <button
-                  key={n._id}
-                  type="button"
-                  onClick={() => void markOne(n)}
-                  className={`block w-full border-b border-[var(--line)] px-3 py-3 text-start text-[var(--ink)] last:border-0 hover:bg-[var(--brand-soft)] ${
-                    n.readAt ? "opacity-70" : ""
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
-                    {!n.readAt ? (
-                      <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--accent)]" />
-                    ) : (
-                      <span className="mt-1.5 h-2 w-2 shrink-0" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold text-[var(--ink)]">
-                        {n.title}
-                      </div>
-                      {n.body ? (
-                        <div className="mt-0.5 line-clamp-2 text-xs text-[var(--muted)]">
-                          {n.body}
-                        </div>
-                      ) : null}
-                      <div className="mt-1 text-[10px] text-[var(--muted)]">
-                        {formatWhen(n.createdAt)}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      ) : null}
+      {mounted && panel ? createPortal(panel, document.body) : null}
     </div>
   );
 }

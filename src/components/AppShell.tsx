@@ -9,12 +9,14 @@ import { ROLE_LABELS } from "@/constants/lookups";
 import { isNavActive, NAV_LINKS } from "@/components/navLinks";
 import { NotificationBell } from "@/components/NotificationBell";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { useUnreadNotificationCount } from "@/hooks/useUnreadNotificationCount";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { data } = useSession();
   const role = data?.user?.role;
   const [open, setOpen] = useState(false);
+  const unreadCount = useUnreadNotificationCount(Boolean(data?.user));
 
   // Close drawer on route change
   useEffect(() => {
@@ -51,8 +53,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--bg-elevated)]/95 px-4 backdrop-blur lg:hidden">
         <button
           type="button"
-          className="menu-toggle"
-          aria-label={open ? "إغلاق القائمة" : "فتح القائمة"}
+          className="menu-toggle relative"
+          aria-label={
+            open
+              ? "إغلاق القائمة"
+              : unreadCount > 0
+                ? `فتح القائمة — ${unreadCount} إشعار غير مقروء`
+                : "فتح القائمة"
+          }
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
         >
@@ -62,6 +70,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className={open ? "block" : "hidden"}>
             <CloseIcon />
           </span>
+          {!open && unreadCount > 0 ? (
+            <span className="absolute -top-0.5 -end-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--danger)] px-1 text-[10px] font-bold text-white">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          ) : null}
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
           <Image
