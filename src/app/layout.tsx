@@ -23,6 +23,9 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "إدارة المهام",
   },
+  formatDetection: {
+    telephone: false,
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -30,7 +33,10 @@ export const metadata: Metadata = {
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/alhadara-logo.png", type: "image/png" },
     ],
-    apple: [{ url: "/apple-icon.png", type: "image/png" }],
+    apple: [
+      { url: "/apple-icon.png", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
     shortcut: ["/favicon.ico"],
   },
 };

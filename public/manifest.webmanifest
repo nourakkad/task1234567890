@@ -2,7 +2,7 @@
   "name": "إدارة المهام | الحضارة",
   "short_name": "إدارة المهام",
   "description": "نظام إدارة المهام بين الإدارة والمدراء والموظفين",
-  "start_url": "/",
+  "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",

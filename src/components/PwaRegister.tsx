@@ -2,16 +2,18 @@
 
 import { useEffect } from "react";
 
-/** Registers the minimal service worker so the app can be installed. */
+/** Registers the PWA service worker (shell cache, no /api intercept). */
 export function PwaRegister() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!("serviceWorker" in navigator)) return;
 
     navigator.serviceWorker
-      .register("/sw.js")
+      .register("/sw.js", {
+        scope: "/",
+        updateViaCache: "none",
+      })
       .then((reg) => {
-        // Force check for updated SW (v2 no longer intercepts /api on iPhone)
         void reg.update();
       })
       .catch(() => {

@@ -1,0 +1,37 @@
+import type { MetadataRoute } from "next";
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: "إدارة المهام | الحضارة",
+    short_name: "إدارة المهام",
+    description: "نظام إدارة المهام بين الإدارة والمدراء والموظفين",
+    start_url: "/dashboard",
+    scope: "/",
+    display: "standalone",
+    orientation: "any",
+    background_color: "#16325c",
+    theme_color: "#16325c",
+    lang: "ar",
+    dir: "rtl",
+    icons: [
+      {
+        src: "/icons/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icons/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icons/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
+      },
+    ],
+  };
+}

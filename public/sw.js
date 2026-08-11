@@ -1,33 +1,128 @@
-/* Minimal service worker — required for installability.
- * Do NOT intercept /api or auth: iOS Safari PWA breaks session cookies
- * when every request is re-fetched through respondWith(fetch(...)).
- * Version: v2-no-api-intercept
+/* Alhadara PWA service worker
+ * - Cache app shell / static assets so reopen works offline
+ * - NEVER intercept /api or NextAuth (breaks iOS session cookies)
+ * Version: v3-shell-cache
  */
+const CACHE = "alhadara-v3";
+const PRECACHE = [
+  "/offline",
+  "/manifest.webmanifest",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/alhadara-logo.png",
+  "/favicon.ico",
+];
+
+function isApiOrAuth(url) {
+  return (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/api") ||
+    url.pathname.includes("/auth/")
+  );
+}
+
 self.addEventListener("install", (event) => {
-  self.skipWaiting();
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      await Promise.all(
+        PRECACHE.map(async (url) => {
+          try {
+            await cache.add(url);
+          } catch {
+            // ignore missing asset during install
+          }
+        })
+      );
+      await self.skipWaiting();
+    })()
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      await self.clients.claim();
-      // Drop any old caches from earlier SW versions
       const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k)));
+      await Promise.all(
+        keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))
+      );
+      await self.clients.claim();
     })()
   );
 });
 
 self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
+  const req = event.request;
+  if (req.method !== "GET") return;
 
-  // Let the browser handle API + NextAuth natively (critical on iPhone)
-  if (url.pathname.startsWith("/api/")) {
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (isApiOrAuth(url)) return;
+
+  // Hashed Next static assets — cache-first
+  if (url.pathname.startsWith("/_next/static/")) {
+    event.respondWith(cacheFirst(req));
     return;
   }
 
-  // Navigations and static assets: network only, no caching
-  if (event.request.mode === "navigate") {
-    event.respondWith(fetch(event.request));
+  // Navigations — network first, then cache, then /offline
+  if (req.mode === "navigate") {
+    event.respondWith(networkFirstNavigate(req));
+    return;
   }
+
+  // Other same-origin GETs (icons, manifest, etc.)
+  event.respondWith(staleWhileRevalidate(req));
 });
+
+async function cacheFirst(req) {
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(req);
+  if (cached) return cached;
+  const res = await fetch(req);
+  if (res && res.ok) {
+    await cache.put(req, res.clone());
+  }
+  return res;
+}
+
+async function networkFirstNavigate(req) {
+  const cache = await caches.open(CACHE);
+  try {
+    const res = await fetch(req);
+    if (res && res.ok) {
+      await cache.put(req, res.clone());
+    }
+    return res;
+  } catch {
+    const cached = await cache.match(req);
+    if (cached) return cached;
+    const offline = await cache.match("/offline");
+    if (offline) return offline;
+    return new Response("Offline", {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+}
+
+async function staleWhileRevalidate(req) {
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(req);
+  const networkPromise = fetch(req)
+    .then(async (res) => {
+      if (res && res.ok) {
+        await cache.put(req, res.clone());
+      }
+      return res;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    void networkPromise;
+    return cached;
+  }
+  const res = await networkPromise;
+  if (res) return res;
+  return new Response("", { status: 504 });
+}
