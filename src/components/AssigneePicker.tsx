@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CEO_DEPARTMENT_NAME,
   ROLE_LABELS,
   type ContractType,
   type UserRole,
@@ -17,6 +18,18 @@ export interface AssigneeOption {
     name?: string;
     underCeo?: boolean;
   } | string | null;
+}
+
+function isCeoDirectAssignee(u: AssigneeOption) {
+  if (u.role !== "employee") return false;
+  if (u.contractType === "external" || u.underCeo) return true;
+  if (typeof u.departmentId === "object" && u.departmentId) {
+    return (
+      Boolean(u.departmentId.underCeo) ||
+      u.departmentId.name === CEO_DEPARTMENT_NAME
+    );
+  }
+  return false;
 }
 
 type Props = {
@@ -54,12 +67,7 @@ export function AssigneePicker({
     >
       {users.map((u) => {
         const selected = value === u._id;
-        const isCeoDirect =
-          u.role === "employee" &&
-          (u.contractType === "external" ||
-            u.underCeo ||
-            (typeof u.departmentId === "object" &&
-              Boolean(u.departmentId?.underCeo)));
+        const isCeoDirect = isCeoDirectAssignee(u);
         const roleLabel = ROLE_LABELS[u.role as UserRole] || u.role;
         const deptName =
           typeof u.departmentId === "object" && u.departmentId?.name

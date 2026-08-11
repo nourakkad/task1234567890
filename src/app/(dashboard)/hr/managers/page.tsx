@@ -12,6 +12,7 @@ import { PasswordField } from "@/components/PasswordField";
 import { matchesSearch, SearchField } from "@/components/SearchField";
 import { LoginPasswordLine } from "@/components/LoginPasswordLine";
 import { useSuccessToast } from "@/components/SuccessToast";
+import { isCeoControlledDept } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
 
 interface TeamUser {
@@ -64,7 +65,7 @@ export default function HrManagersPage() {
   );
 
   const managerDepartments = useMemo(
-    () => departments.filter((d) => !d.underCeo),
+    () => departments.filter((d) => !isCeoControlledDept(d)),
     [departments]
   );
 

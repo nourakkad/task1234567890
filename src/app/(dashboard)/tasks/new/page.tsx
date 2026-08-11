@@ -7,7 +7,7 @@ import { AssigneePicker } from "@/components/AssigneePicker";
 import { PageHeader } from "@/components/PageHeader";
 import { useOfflineSync } from "@/components/OfflineSyncProvider";
 import { useSuccessToast } from "@/components/SuccessToast";
-import { ROLE_LABELS } from "@/constants/lookups";
+import { CEO_DEPARTMENT_NAME, ROLE_LABELS } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
 
 interface AssignableUser {
@@ -83,7 +83,8 @@ export default function NewTaskPage() {
     (selectedOwner.contractType === "external" ||
       selectedOwner.underCeo ||
       (typeof selectedOwner.departmentId === "object" &&
-        Boolean(selectedOwner.departmentId?.underCeo)));
+        (Boolean(selectedOwner.departmentId?.underCeo) ||
+          selectedOwner.departmentId?.name === CEO_DEPARTMENT_NAME)));
   const ownerNeedsNoDept =
     selectedOwner?.role === "ceo" || selectedOwner?.role === "hr";
 

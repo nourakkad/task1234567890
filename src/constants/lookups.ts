@@ -90,6 +90,15 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
 /** System department for external-contract employees under the CEO. */
 export const CEO_DEPARTMENT_NAME = "المدير التنفيذي";
 
+/** Client/server-safe check for CEO-controlled departments. */
+export function isCeoControlledDept(d?: {
+  underCeo?: boolean;
+  name?: string | null;
+} | null): boolean {
+  if (!d) return false;
+  return Boolean(d.underCeo) || d.name === CEO_DEPARTMENT_NAME;
+}
+
 export const DEPARTMENT_NAMES = [
   "المشتريات",
   "اللوجستيات",

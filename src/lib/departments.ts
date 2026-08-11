@@ -106,12 +106,16 @@ export async function syncManagerDepartments(
   }
 
   const found = await Department.find({ _id: { $in: oids } }).select(
-    "_id underCeo"
+    "_id underCeo name"
   );
   if (found.length !== oids.length) {
     throw new Error("DEPARTMENT_NOT_FOUND");
   }
-  if (found.some((d) => d.underCeo)) {
+  if (
+    found.some(
+      (d) => Boolean(d.underCeo) || d.name === CEO_DEPARTMENT_NAME
+    )
+  ) {
     throw new Error("CEO_CONTROLLED_DEPARTMENT");
   }
 
@@ -120,7 +124,11 @@ export async function syncManagerDepartments(
     { $set: { managerId: null } }
   );
   await Department.updateMany(
-    { _id: { $in: oids } },
+    {
+      _id: { $in: oids },
+      underCeo: { $ne: true },
+      name: { $ne: CEO_DEPARTMENT_NAME },
+    },
     { $set: { managerId: mid, underCeo: false } }
   );
 

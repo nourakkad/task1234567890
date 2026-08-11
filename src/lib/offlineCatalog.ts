@@ -62,7 +62,8 @@ export type CachedAssignee = {
   name: string;
   role: string;
   contractType?: string;
-  departmentId?: { _id?: string; name?: string } | string | null;
+  underCeo?: boolean;
+  departmentId?: { _id?: string; name?: string; underCeo?: boolean } | string | null;
   managedDepartments?: Array<{ _id: string; name: string }>;
 };
 
@@ -467,12 +468,21 @@ export async function rememberAssignees(
     const store = tx.objectStore(ASSIGNEES);
     for (const u of users) {
       if (!u?._id) continue;
+      const dept =
+        u.departmentId && typeof u.departmentId === "object"
+          ? {
+              _id: u.departmentId._id,
+              name: u.departmentId.name,
+              underCeo: u.departmentId.underCeo,
+            }
+          : u.departmentId ?? null;
       store.put({
         _id: String(u._id),
         name: String(u.name || ""),
         role: String(u.role || ""),
         contractType: u.contractType,
-        departmentId: u.departmentId ?? null,
+        underCeo: Boolean(u.underCeo),
+        departmentId: dept,
         managedDepartments: u.managedDepartments,
       } satisfies CachedAssignee);
     }

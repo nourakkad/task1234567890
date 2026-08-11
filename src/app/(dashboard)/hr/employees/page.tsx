@@ -16,6 +16,7 @@ import {
   CEO_DEPARTMENT_NAME,
   CONTRACT_TYPE_LABELS,
   ROLE_LABELS,
+  isCeoControlledDept,
   type ContractType,
 } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
@@ -27,7 +28,7 @@ interface TeamUser {
   role: string;
   contractType?: ContractType;
   loginPassword?: string | null;
-  departmentId?: { _id?: string; name?: string };
+  departmentId?: { _id?: string; name?: string; underCeo?: boolean };
   managerId?: { _id?: string; name?: string };
   managedDepartments?: Array<{ _id: string; name: string }>;
 }
@@ -36,6 +37,12 @@ interface Department {
   _id: string;
   name: string;
   underCeo?: boolean;
+}
+
+function underCeoLabel(u: TeamUser) {
+  return (
+    u.contractType === "external" || isCeoControlledDept(u.departmentId)
+  );
 }
 
 export default function HrEmployeesPage() {
@@ -67,9 +74,28 @@ export default function HrEmployeesPage() {
     [users]
   );
   const ceoDepartments = useMemo(
-    () => departments.filter((d) => d.underCeo || d.name === CEO_DEPARTMENT_NAME),
+    () => departments.filter((d) => isCeoControlledDept(d)),
     [departments]
   );
+  const managerDepartments = useMemo(
+    () => departments.filter((d) => !isCeoControlledDept(d)),
+    [departments]
+  );
+
+  const selectedCreateDept = useMemo(
+    () => departments.find((d) => d._id === departmentId),
+    [departments, departmentId]
+  );
+  const createUnderCeo =
+    contractType === "external" || isCeoControlledDept(selectedCreateDept);
+
+  const selectedEditDept = useMemo(
+    () => departments.find((d) => d._id === editDeptId),
+    [departments, editDeptId]
+  );
+  const editUnderCeo =
+    editContractType === "external" || isCeoControlledDept(selectedEditDept);
+
   const employees = useMemo(
     () =>
       users.filter(
@@ -84,11 +110,29 @@ export default function HrEmployeesPage() {
             u.contractType === "external"
               ? CONTRACT_TYPE_LABELS.external
               : CONTRACT_TYPE_LABELS.internal,
-            u.contractType === "external" ? CEO_DEPARTMENT_NAME : ""
+            underCeoLabel(u) ? ROLE_LABELS.ceo : ""
           )
       ),
     [users, query]
   );
+
+  const managersForCreateDept = useMemo(() => {
+    if (!departmentId || createUnderCeo) return [];
+    return managers.filter((m) => {
+      const managed = m.managedDepartments || [];
+      if (managed.some((d) => d._id === departmentId)) return true;
+      return m.departmentId?._id === departmentId;
+    });
+  }, [managers, departmentId, createUnderCeo]);
+
+  const managersForEditDept = useMemo(() => {
+    if (!editDeptId || editUnderCeo) return [];
+    return managers.filter((m) => {
+      const managed = m.managedDepartments || [];
+      if (managed.some((d) => d._id === editDeptId)) return true;
+      return m.departmentId?._id === editDeptId;
+    });
+  }, [managers, editDeptId, editUnderCeo]);
 
   async function load() {
     const data = await apiGet<{ users: TeamUser[]; departments: Department[] }>(
@@ -121,52 +165,71 @@ export default function HrEmployeesPage() {
       }
       return;
     }
-    const mgr = managers.find((m) => m._id === managerId);
-    if (!mgr) return;
-    const managed = mgr.managedDepartments || [];
-    if (managed.length === 1) {
-      setDepartmentId(managed[0]._id);
-    } else if (mgr.departmentId?._id && managed.length === 0) {
-      setDepartmentId(mgr.departmentId._id);
-    } else if (
-      departmentId &&
-      managed.length > 0 &&
-      !managed.some((d) => d._id === departmentId)
+    if (isCeoControlledDept(selectedCreateDept)) {
+      setManagerId("");
+      return;
+    }
+    if (
+      managerId &&
+      managersForCreateDept.length > 0 &&
+      !managersForCreateDept.some((m) => m._id === managerId)
     ) {
-      setDepartmentId("");
+      setManagerId("");
     }
-  }, [contractType, managerId, managers, departmentId, ceoDepartments]);
+  }, [
+    contractType,
+    departmentId,
+    ceoDepartments,
+    selectedCreateDept,
+    managerId,
+    managersForCreateDept,
+  ]);
 
-  const createDeptOptions = useMemo(() => {
-    const mgr = managers.find((m) => m._id === managerId);
-    if (mgr?.managedDepartments && mgr.managedDepartments.length > 0) {
-      return mgr.managedDepartments;
+  useEffect(() => {
+    if (editContractType === "external") {
+      setEditManagerId("");
+      if (!editDeptId || !ceoDepartments.some((d) => d._id === editDeptId)) {
+        const preferred =
+          ceoDepartments.find((d) => d.name === CEO_DEPARTMENT_NAME) ||
+          ceoDepartments[0];
+        setEditDeptId(preferred?._id || "");
+      }
+      return;
     }
-    return departments;
-  }, [managers, managerId, departments]);
-
-  const editDeptOptions = useMemo(() => {
-    const mgr = managers.find((m) => m._id === editManagerId);
-    if (mgr?.managedDepartments && mgr.managedDepartments.length > 0) {
-      return mgr.managedDepartments;
+    if (isCeoControlledDept(selectedEditDept)) {
+      setEditManagerId("");
+      return;
     }
-    return departments;
-  }, [managers, editManagerId, departments]);
+    if (
+      editManagerId &&
+      managersForEditDept.length > 0 &&
+      !managersForEditDept.some((m) => m._id === editManagerId)
+    ) {
+      setEditManagerId("");
+    }
+  }, [
+    editContractType,
+    editDeptId,
+    ceoDepartments,
+    selectedEditDept,
+    editManagerId,
+    managersForEditDept,
+  ]);
 
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setMessage("");
-    if (contractType === "internal" && !managerId) {
+    if (!departmentId) {
+      setError(
+        contractType === "external" || createUnderCeo
+          ? "اختر قسمًا تحت سيطرة المدير التنفيذي"
+          : "اختر القسم"
+      );
+      return;
+    }
+    if (!createUnderCeo && !managerId) {
       setError("اختر المدير المسؤول");
-      return;
-    }
-    if (contractType === "internal" && !departmentId) {
-      setError("اختر القسم");
-      return;
-    }
-    if (contractType === "external" && !departmentId) {
-      setError("اختر قسمًا تحت سيطرة المدير التنفيذي");
       return;
     }
     const formEl = e.currentTarget;
@@ -179,14 +242,8 @@ export default function HrEmployeesPage() {
         password: form.get("password"),
         role: "employee",
         contractType,
-        ...(contractType === "internal"
-          ? {
-              managerId,
-              departmentId: departmentId || undefined,
-            }
-          : {
-              departmentId: departmentId || undefined,
-            }),
+        departmentId,
+        ...(createUnderCeo ? {} : { managerId }),
       });
       formEl.reset();
       setContractType("internal");
@@ -214,16 +271,16 @@ export default function HrEmployeesPage() {
   async function onSaveEdit(e: FormEvent) {
     e.preventDefault();
     if (!editing) return;
-    if (editContractType === "internal" && !editManagerId) {
+    if (!editDeptId) {
+      setError(
+        editContractType === "external" || editUnderCeo
+          ? "اختر قسمًا تحت سيطرة المدير التنفيذي"
+          : "اختر القسم"
+      );
+      return;
+    }
+    if (!editUnderCeo && !editManagerId) {
       setError("اختر المدير المسؤول");
-      return;
-    }
-    if (editContractType === "internal" && !editDeptId) {
-      setError("اختر القسم");
-      return;
-    }
-    if (editContractType === "external" && !editDeptId) {
-      setError("اختر قسمًا تحت سيطرة المدير التنفيذي");
       return;
     }
     setBusy(true);
@@ -233,14 +290,10 @@ export default function HrEmployeesPage() {
         name: editName,
         email: editEmail,
         contractType: editContractType,
-        ...(editContractType === "internal"
-          ? {
-              managerId: editManagerId,
-              departmentId: editDeptId,
-            }
-          : {
-              departmentId: editDeptId,
-            }),
+        departmentId: editDeptId,
+        ...(editUnderCeo
+          ? { managerId: null }
+          : { managerId: editManagerId }),
         ...(editPassword.trim() ? { password: editPassword } : {}),
       });
       await load();
@@ -270,11 +323,18 @@ export default function HrEmployeesPage() {
     }
   }
 
-  const canSubmitInternal = managers.length > 0;
+  const createDeptList =
+    contractType === "external" ? ceoDepartments : departments;
+  const editDeptList =
+    editContractType === "external" ? ceoDepartments : departments;
+
   const createDisabled =
     loading ||
-    (contractType === "internal" && !canSubmitInternal) ||
-    (contractType === "external" && !ceoDepartments.length);
+    (contractType === "external" && !ceoDepartments.length) ||
+    (contractType === "internal" &&
+      !createUnderCeo &&
+      managers.length === 0 &&
+      managerDepartments.length === 0);
 
   if (status === "loading" || session?.user?.role !== "hr") {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;
@@ -306,6 +366,7 @@ export default function HrEmployeesPage() {
           ) : (
             employees.map((u) => {
               const isExternal = u.contractType === "external";
+              const underCeo = underCeoLabel(u);
               return (
                 <article
                   key={u._id}
@@ -318,8 +379,8 @@ export default function HrEmployeesPage() {
                     <div className="mt-1 text-sm">
                       {CONTRACT_TYPE_LABELS[isExternal ? "external" : "internal"]}
                       {" · "}
-                      {isExternal
-                        ? `تحت ${ROLE_LABELS.ceo} مباشرة`
+                      {underCeo
+                        ? `تحت ${ROLE_LABELS.ceo} مباشرة · ${u.departmentId?.name || "بدون قسم"}`
                         : `${u.managerId?.name || "بدون مدير"} · ${u.departmentId?.name || "بدون قسم"}`}
                     </div>
                   </div>
@@ -375,76 +436,66 @@ export default function HrEmployeesPage() {
               <option value="external">{CONTRACT_TYPE_LABELS.external}</option>
             </select>
           </div>
-          {contractType === "external" ? (
-            <div className="space-y-3">
-              <div className="rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-3 text-sm">
-                <div className="font-semibold">
-                  تحت {ROLE_LABELS.ceo} مباشرة
-                </div>
-                <div className="mt-1 text-[var(--muted)]">
-                  اختر قسمًا تحت سيطرة المدير التنفيذي — لا يلزم اختيار مدير
-                </div>
+
+          <div className="field">
+            <label>القسم</label>
+            <select
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+              required
+            >
+              <option value="">— اختر —</option>
+              {createDeptList.map((d) => (
+                <option key={d._id} value={d._id}>
+                  {d.name}
+                  {isCeoControlledDept(d) ? ` · تحت ${ROLE_LABELS.ceo}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {createUnderCeo ? (
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-3 text-sm">
+              <div className="font-semibold">
+                تحت {ROLE_LABELS.ceo} مباشرة
               </div>
-              <div className="field">
-                <label>القسم</label>
-                <select
-                  value={departmentId}
-                  onChange={(e) => setDepartmentId(e.target.value)}
-                  required
-                >
-                  <option value="">— اختر —</option>
-                  {ceoDepartments.map((d) => (
-                    <option key={d._id} value={d._id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
+              <div className="mt-1 text-[var(--muted)]">
+                هذا القسم تحت سيطرة المدير التنفيذي — لا يلزم اختيار مدير
               </div>
-              {!ceoDepartments.length ? (
-                <p className="text-xs text-[var(--muted)]">
-                  أنشئ قسمًا تحت سيطرة المدير التنفيذي من صفحة الأقسام أولًا
+            </div>
+          ) : (
+            <div className="field">
+              <label>المدير المسؤول</label>
+              <select
+                value={managerId}
+                onChange={(e) => setManagerId(e.target.value)}
+                required
+                disabled={!departmentId}
+              >
+                <option value="">
+                  {departmentId ? "— اختر —" : "اختر القسم أولًا"}
+                </option>
+                {managersForCreateDept.map((m) => (
+                  <option key={m._id} value={m._id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              {departmentId && managersForCreateDept.length === 0 ? (
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  لا يوجد مدير مرتبط بهذا القسم — عيّن مديرًا للقسم من صفحة
+                  المدراء
                 </p>
               ) : null}
             </div>
-          ) : (
-            <>
-              <div className="field">
-                <label>المدير المسؤول</label>
-                <select
-                  value={managerId}
-                  onChange={(e) => setManagerId(e.target.value)}
-                  required
-                >
-                  <option value="">— اختر —</option>
-                  {managers.map((m) => (
-                    <option key={m._id} value={m._id}>
-                      {m.name}
-                      {m.managedDepartments && m.managedDepartments.length > 0
-                        ? ` (${m.managedDepartments.map((d) => d.name).join("، ")})`
-                        : m.departmentId?.name
-                          ? ` (${m.departmentId.name})`
-                          : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label>القسم</label>
-                <select
-                  value={departmentId}
-                  onChange={(e) => setDepartmentId(e.target.value)}
-                  required
-                >
-                  <option value="">— اختر —</option>
-                  {createDeptOptions.map((d) => (
-                    <option key={d._id} value={d._id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
           )}
+
+          {!ceoDepartments.length && contractType === "external" ? (
+            <p className="text-xs text-[var(--muted)]">
+              أنشئ قسمًا تحت سيطرة المدير التنفيذي من صفحة الأقسام أولًا
+            </p>
+          ) : null}
+
           <button
             type="submit"
             className="btn btn-primary w-full"
@@ -452,11 +503,6 @@ export default function HrEmployeesPage() {
           >
             {loading ? "جارٍ الحفظ..." : "حفظ الموظف"}
           </button>
-          {contractType === "internal" && !managers.length ? (
-            <p className="text-xs text-[var(--muted)]">
-              أضف مديرًا أولًا من صفحة المدراء
-            </p>
-          ) : null}
         </form>
       </div>
 
@@ -500,65 +546,50 @@ export default function HrEmployeesPage() {
                 <option value="external">{CONTRACT_TYPE_LABELS.external}</option>
               </select>
             </div>
-            {editContractType === "external" ? (
-              <div className="space-y-3">
-                <div className="rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-3 text-sm">
-                  <div className="font-semibold">
-                    تحت {ROLE_LABELS.ceo} مباشرة
-                  </div>
-                  <div className="mt-1 text-[var(--muted)]">
-                    اختر قسمًا تحت سيطرة المدير التنفيذي
-                  </div>
+            <div className="field">
+              <label>القسم</label>
+              <select
+                value={editDeptId}
+                onChange={(e) => setEditDeptId(e.target.value)}
+                required
+              >
+                <option value="">— اختر —</option>
+                {editDeptList.map((d) => (
+                  <option key={d._id} value={d._id}>
+                    {d.name}
+                    {isCeoControlledDept(d) ? ` · تحت ${ROLE_LABELS.ceo}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {editUnderCeo ? (
+              <div className="rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-3 text-sm">
+                <div className="font-semibold">
+                  تحت {ROLE_LABELS.ceo} مباشرة
                 </div>
-                <div className="field">
-                  <label>القسم</label>
-                  <select
-                    value={editDeptId}
-                    onChange={(e) => setEditDeptId(e.target.value)}
-                    required
-                  >
-                    <option value="">— اختر —</option>
-                    {ceoDepartments.map((d) => (
-                      <option key={d._id} value={d._id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
+                <div className="mt-1 text-[var(--muted)]">
+                  هذا القسم تحت سيطرة المدير التنفيذي — لا يلزم اختيار مدير
                 </div>
               </div>
             ) : (
-              <>
-                <div className="field">
-                  <label>المدير</label>
-                  <select
-                    value={editManagerId}
-                    onChange={(e) => setEditManagerId(e.target.value)}
-                    required
-                  >
-                    <option value="">— اختر —</option>
-                    {managers.map((m) => (
-                      <option key={m._id} value={m._id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>القسم</label>
-                  <select
-                    value={editDeptId}
-                    onChange={(e) => setEditDeptId(e.target.value)}
-                    required
-                  >
-                    <option value="">— اختر —</option>
-                    {editDeptOptions.map((d) => (
-                      <option key={d._id} value={d._id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
+              <div className="field">
+                <label>المدير</label>
+                <select
+                  value={editManagerId}
+                  onChange={(e) => setEditManagerId(e.target.value)}
+                  required
+                  disabled={!editDeptId}
+                >
+                  <option value="">
+                    {editDeptId ? "— اختر —" : "اختر القسم أولًا"}
+                  </option>
+                  {managersForEditDept.map((m) => (
+                    <option key={m._id} value={m._id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
             <PasswordField
               label="كلمة مرور جديدة (اختياري)"

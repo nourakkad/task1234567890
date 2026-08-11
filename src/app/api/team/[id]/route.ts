@@ -11,6 +11,7 @@ import {
   ensureCeoDepartment,
   getCeoControlledDepartments,
   getManagedDepartments,
+  isCeoControlledDepartmentId,
   parseDepartmentIds,
   syncManagerDepartments,
 } from "@/lib/departments";
@@ -163,50 +164,69 @@ export async function PATCH(request: Request, { params }: Params) {
       } else {
         target.contractType = "internal";
 
-        if (body.managerId !== undefined) {
-          if (!Types.ObjectId.isValid(String(body.managerId))) {
-            return jsonError("معرّف المدير غير صالح");
-          }
-          const manager = await User.findOne({
-            _id: body.managerId,
-            role: "manager",
-            active: true,
-          });
-          if (!manager) return jsonError("المدير غير موجود", 404);
-          target.managerId = manager._id;
-          if (!body.departmentId) {
-            const managed = await getManagedDepartments(manager._id);
-            if (managed.length === 1) {
-              target.departmentId = new Types.ObjectId(managed[0]._id);
-            } else if (manager.departmentId) {
-              target.departmentId = manager.departmentId;
+        const nextDeptId =
+          body.departmentId !== undefined
+            ? String(body.departmentId)
+            : target.departmentId
+              ? String(target.departmentId)
+              : "";
+        const wantsCeoDept =
+          nextDeptId && (await isCeoControlledDepartmentId(nextDeptId));
+
+        if (wantsCeoDept) {
+          target.managerId = null;
+          target.departmentId = new Types.ObjectId(nextDeptId);
+        } else {
+          if (body.managerId !== undefined) {
+            if (!Types.ObjectId.isValid(String(body.managerId))) {
+              return jsonError("معرّف المدير غير صالح");
+            }
+            const manager = await User.findOne({
+              _id: body.managerId,
+              role: "manager",
+              active: true,
+            });
+            if (!manager) return jsonError("المدير غير موجود", 404);
+            target.managerId = manager._id;
+            if (!body.departmentId) {
+              const managed = await getManagedDepartments(manager._id);
+              if (managed.length === 1) {
+                target.departmentId = new Types.ObjectId(managed[0]._id);
+              } else if (manager.departmentId) {
+                target.departmentId = manager.departmentId;
+              }
             }
           }
-        }
 
-        if (!target.managerId) {
-          return jsonError("اختر المدير المسؤول");
-        }
-
-        if (body.departmentId !== undefined) {
-          if (!Types.ObjectId.isValid(String(body.departmentId))) {
-            return jsonError("معرّف القسم غير صالح");
+          if (!target.managerId) {
+            return jsonError("اختر المدير المسؤول");
           }
-          const dept = await Department.findById(body.departmentId);
-          if (!dept) return jsonError("القسم غير موجود", 404);
-          const managed = await getManagedDepartments(target.managerId);
-          const managedIds = managed.map((d) => d._id);
-          if (
-            managedIds.length > 0 &&
-            !managedIds.includes(String(body.departmentId))
-          ) {
-            return jsonError("القسم ليس من أقسام مدير هذا الموظف", 403);
-          }
-          target.departmentId = dept._id;
-        }
 
-        if (!target.departmentId) {
-          return jsonError("اختر قسمًا من أقسام المدير");
+          if (body.departmentId !== undefined) {
+            if (!Types.ObjectId.isValid(String(body.departmentId))) {
+              return jsonError("معرّف القسم غير صالح");
+            }
+            const dept = await Department.findById(body.departmentId);
+            if (!dept) return jsonError("القسم غير موجود", 404);
+            if (await isCeoControlledDepartmentId(body.departmentId)) {
+              return jsonError(
+                "هذا القسم تحت سيطرة المدير التنفيذي — لا يُربط بمدير"
+              );
+            }
+            const managed = await getManagedDepartments(target.managerId);
+            const managedIds = managed.map((d) => d._id);
+            if (
+              managedIds.length > 0 &&
+              !managedIds.includes(String(body.departmentId))
+            ) {
+              return jsonError("القسم ليس من أقسام مدير هذا الموظف", 403);
+            }
+            target.departmentId = dept._id;
+          }
+
+          if (!target.departmentId) {
+            return jsonError("اختر قسمًا من أقسام المدير");
+          }
         }
       }
     }

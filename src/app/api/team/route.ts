@@ -12,9 +12,11 @@ import {
   ensureCeoDepartment,
   getCeoControlledDepartments,
   getManagedDepartments,
+  isCeoControlledDepartmentId,
   parseDepartmentIds,
   syncManagerDepartments,
 } from "@/lib/departments";
+
 import {
   buildTeamPerformance,
   currentMonthRange,
@@ -69,7 +71,7 @@ export async function GET() {
         role: { $in: [...roles] },
       })
         .select("-passwordHash")
-        .populate("departmentId", "_id name")
+        .populate("departmentId", "_id name underCeo")
         .populate("managerId", "_id name email")
         .sort({ role: 1, name: 1 })
         .lean();
@@ -247,38 +249,56 @@ export async function POST(request: Request) {
           departmentId = ceoDept._id;
         }
       } else {
-        if (!body.managerId || !Types.ObjectId.isValid(String(body.managerId))) {
-          return jsonError("اختر المدير المسؤول");
-        }
-        const manager = await User.findOne({
-          _id: body.managerId,
-          role: "manager",
-          active: true,
-        });
-        if (!manager) return jsonError("المدير غير موجود", 404);
-        managerId = manager._id;
+        // Internal: CEO-controlled department → no manager; otherwise manager required
+        const wantsCeoDept =
+          body.departmentId &&
+          (await isCeoControlledDepartmentId(body.departmentId));
 
-        const managed = await getManagedDepartments(manager._id);
-        const managedIds = managed.map((d) => d._id);
+        if (wantsCeoDept) {
+          managerId = null;
+          departmentId = new Types.ObjectId(String(body.departmentId));
+        } else {
+          if (
+            !body.managerId ||
+            !Types.ObjectId.isValid(String(body.managerId))
+          ) {
+            return jsonError("اختر المدير المسؤول");
+          }
+          const manager = await User.findOne({
+            _id: body.managerId,
+            role: "manager",
+            active: true,
+          });
+          if (!manager) return jsonError("المدير غير موجود", 404);
+          managerId = manager._id;
 
-        if (body.departmentId) {
-          if (!Types.ObjectId.isValid(String(body.departmentId))) {
-            return jsonError("معرّف القسم غير صالح");
+          const managed = await getManagedDepartments(manager._id);
+          const managedIds = managed.map((d) => d._id);
+
+          if (body.departmentId) {
+            if (!Types.ObjectId.isValid(String(body.departmentId))) {
+              return jsonError("معرّف القسم غير صالح");
+            }
+            const deptId = String(body.departmentId);
+            if (managedIds.length > 0 && !managedIds.includes(deptId)) {
+              return jsonError("القسم ليس من أقسام هذا المدير", 403);
+            }
+            if (await isCeoControlledDepartmentId(deptId)) {
+              return jsonError(
+                "هذا القسم تحت سيطرة المدير التنفيذي — لا يُربط بمدير"
+              );
+            }
+            const dept = await Department.findById(deptId);
+            if (!dept) return jsonError("القسم غير موجود");
+            departmentId = dept._id;
+          } else if (managedIds.length === 1) {
+            departmentId = new Types.ObjectId(managedIds[0]);
+          } else if (manager.departmentId) {
+            departmentId = manager.departmentId;
           }
-          const deptId = String(body.departmentId);
-          if (managedIds.length > 0 && !managedIds.includes(deptId)) {
-            return jsonError("القسم ليس من أقسام هذا المدير", 403);
+          if (!departmentId) {
+            return jsonError("اختر قسمًا من أقسام المدير");
           }
-          const dept = await Department.findById(deptId);
-          if (!dept) return jsonError("القسم غير موجود");
-          departmentId = dept._id;
-        } else if (managedIds.length === 1) {
-          departmentId = new Types.ObjectId(managedIds[0]);
-        } else if (manager.departmentId) {
-          departmentId = manager.departmentId;
-        }
-        if (!departmentId) {
-          return jsonError("اختر قسمًا من أقسام المدير");
         }
       }
 

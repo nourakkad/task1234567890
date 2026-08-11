@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { connectDB } from "@/lib/db";
 import { jsonError, jsonOk, handleApiError } from "@/lib/api";
+import { CEO_DEPARTMENT_NAME } from "@/constants/lookups";
 import { requireSessionUser } from "@/lib/session";
 import { Department } from "@/models/Department";
 import { Task } from "@/models/Task";
@@ -21,6 +22,10 @@ export async function DELETE(_request: Request, { params }: Params) {
 
     const dept = await Department.findById(id);
     if (!dept) return jsonError("القسم غير موجود", 404);
+
+    if (dept.name === CEO_DEPARTMENT_NAME) {
+      return jsonError("لا يمكن حذف قسم المدير التنفيذي النظامي", 400);
+    }
 
     const [usersCount, tasksCount] = await Promise.all([
       User.countDocuments({ departmentId: id, active: true }),

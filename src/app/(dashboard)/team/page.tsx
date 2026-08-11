@@ -12,7 +12,7 @@ import { PasswordField } from "@/components/PasswordField";
 import { matchesSearch, SearchField } from "@/components/SearchField";
 import { LoginPasswordLine } from "@/components/LoginPasswordLine";
 import { useSuccessToast } from "@/components/SuccessToast";
-import { ROLE_LABELS, type ContractType, type UserRole } from "@/constants/lookups";
+import { ROLE_LABELS, type ContractType, type UserRole, isCeoControlledDept } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatScoreAvg } from "@/lib/format";
 
@@ -23,7 +23,7 @@ interface TeamUser {
   role: UserRole;
   contractType?: ContractType;
   loginPassword?: string | null;
-  departmentId?: { name?: string };
+  departmentId?: { name?: string; underCeo?: boolean };
   managerId?: { name?: string };
   managedDepartments?: Array<{ _id: string; name: string }>;
   avgScore?: number | null;
@@ -33,7 +33,15 @@ interface TeamUser {
 interface Department {
   _id: string;
   name: string;
+  underCeo?: boolean;
   managerId?: { name?: string } | null;
+}
+
+function isCeoDirectEmployee(u: TeamUser) {
+  return (
+    u.role === "employee" &&
+    (u.contractType === "external" || isCeoControlledDept(u.departmentId))
+  );
 }
 
 export default function TeamViewPage() {
@@ -126,7 +134,12 @@ export default function TeamViewPage() {
   const filteredDepartments = useMemo(
     () =>
       departments.filter((d) =>
-        matchesSearch(query, d.name, d.managerId?.name)
+        matchesSearch(
+          query,
+          d.name,
+          d.managerId?.name,
+          isCeoControlledDept(d) ? ROLE_LABELS.ceo : ""
+        )
       ),
     [departments, query]
   );
@@ -316,9 +329,11 @@ export default function TeamViewPage() {
                 >
                   <span className="font-medium">{d.name}</span>
                   <span className="text-[var(--muted)]">
-                    {d.managerId?.name
-                      ? `المدير: ${d.managerId.name}`
-                      : "بدون مدير"}
+                    {isCeoControlledDept(d)
+                      ? `تحت ${ROLE_LABELS.ceo} مباشرة`
+                      : d.managerId?.name
+                        ? `المدير: ${d.managerId.name}`
+                        : "بدون مدير"}
                   </span>
                 </li>
               ))}
@@ -471,8 +486,7 @@ function Section({
               </div>
               {showManager ? (
                 <div className="text-sm text-[var(--muted)]">
-                  {u.role === "employee" &&
-                  (u.contractType === "external" || !u.managerId)
+                  {isCeoDirectEmployee(u)
                     ? `تحت ${ROLE_LABELS.ceo} مباشرة`
                     : `المدير: ${u.managerId?.name || "—"}`}
                 </div>
