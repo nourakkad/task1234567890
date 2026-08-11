@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSuccessToast } from "@/components/SuccessToast";
 import { emitNotificationsUpdate } from "@/hooks/useLiveNotifications";
@@ -231,33 +230,24 @@ export function NotificationBell({
         >
           <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2.5">
             <div className="font-semibold">الإشعارات</div>
-            <div className="flex items-center gap-2">
-              {unreadCount > 0 ? (
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-[var(--brand)]"
-                  onClick={() => void markAll()}
-                >
-                  تعليم الكل كمقروء
-                </button>
-              ) : null}
-              <Link
-                href="/notifications"
-                className="text-xs text-[var(--muted)]"
-                onClick={() => setOpen(false)}
+            {unreadCount > 0 ? (
+              <button
+                type="button"
+                className="text-xs font-semibold text-[var(--brand)]"
+                onClick={() => void markAll()}
               >
-                الكل
-              </Link>
-            </div>
+                تعليم الكل كمقروء
+              </button>
+            ) : null}
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-[min(24rem,60vh)] overflow-y-auto">
             {loading ? (
               <p className="p-4 text-sm text-[var(--muted)]">جارٍ التحميل...</p>
             ) : items.length === 0 ? (
               <p className="p-4 text-sm text-[var(--muted)]">لا إشعارات بعد</p>
             ) : (
-              items.slice(0, 12).map((n) => (
+              items.map((n) => (
                 <button
                   key={n._id}
                   type="button"

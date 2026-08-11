@@ -129,16 +129,13 @@ export async function getVisibleTaskFilter(user: SessionUser) {
       new Types.ObjectId(user.id),
       ...employees.map((e) => e._id),
     ];
-    const deptIds = await resolveManagerDepartmentIds(user);
-    const or: Record<string, unknown>[] = [{ ownerId: { $in: ownerIds } }];
-    if (deptIds.length > 0) {
-      or.push({
-        departmentId: {
-          $in: deptIds.map((id) => new Types.ObjectId(id)),
-        },
-      });
-    }
-    return { $or: or };
+    // Own tasks + team tasks + tasks this manager assigned (even if employee left team)
+    return {
+      $or: [
+        { ownerId: { $in: ownerIds } },
+        { assignedById: new Types.ObjectId(user.id) },
+      ],
+    };
   }
 
   return { ownerId: new Types.ObjectId(user.id) };
@@ -156,31 +153,22 @@ function refId(value: unknown): string {
 
 export function canAccessTask(
   user: SessionUser,
-  task: ITask | { ownerId?: unknown; departmentId?: unknown },
+  task: ITask | { ownerId?: unknown; departmentId?: unknown; assignedById?: unknown },
   teamIds: string[],
-  managedDeptIds?: string[]
+  _managedDeptIds?: string[]
 ) {
   if (user.role === "general_manager" || user.role === "ceo") return true;
 
   const ownerId = refId(task.ownerId);
-  const departmentId = refId(task.departmentId);
 
   if (user.role === "employee" || user.role === "hr") {
     return ownerId === user.id;
   }
 
-  // manager: own tasks, managed-department tasks, or team-member tasks
+  // manager: own tasks, team-member tasks, or tasks they assigned
   if (ownerId && ownerId === user.id) return true;
-  const depts =
-    managedDeptIds && managedDeptIds.length > 0
-      ? managedDeptIds
-      : user.departmentIds && user.departmentIds.length > 0
-        ? user.departmentIds
-        : user.departmentId
-          ? [user.departmentId]
-          : [];
-  if (departmentId && depts.includes(departmentId)) return true;
-  return Boolean(ownerId && teamIds.includes(ownerId));
+  if (ownerId && teamIds.includes(ownerId)) return true;
+  return refId(task.assignedById) === user.id;
 }
 
 export async function getTeamMemberIds(managerId: string): Promise<string[]> {

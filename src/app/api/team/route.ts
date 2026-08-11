@@ -9,6 +9,7 @@ import {
   canViewOrgDirectory,
 } from "@/lib/permissions";
 import {
+  ensureCeoDepartment,
   getManagedDepartments,
   parseDepartmentIds,
   syncManagerDepartments,
@@ -218,39 +219,76 @@ export async function POST(request: Request) {
       departmentId = new Types.ObjectId(managerDeptIds[0]);
     } else {
       // employee
-      if (!body.managerId || !Types.ObjectId.isValid(String(body.managerId))) {
-        return jsonError("اختر المدير المسؤول");
+      const contractType =
+        String(body.contractType || "internal") === "external"
+          ? "external"
+          : "internal";
+
+      if (contractType === "external") {
+        const ceoDept = await ensureCeoDepartment();
+        managerId = null;
+        departmentId = ceoDept._id;
+      } else {
+        if (!body.managerId || !Types.ObjectId.isValid(String(body.managerId))) {
+          return jsonError("اختر المدير المسؤول");
+        }
+        const manager = await User.findOne({
+          _id: body.managerId,
+          role: "manager",
+          active: true,
+        });
+        if (!manager) return jsonError("المدير غير موجود", 404);
+        managerId = manager._id;
+
+        const managed = await getManagedDepartments(manager._id);
+        const managedIds = managed.map((d) => d._id);
+
+        if (body.departmentId) {
+          if (!Types.ObjectId.isValid(String(body.departmentId))) {
+            return jsonError("معرّف القسم غير صالح");
+          }
+          const deptId = String(body.departmentId);
+          if (managedIds.length > 0 && !managedIds.includes(deptId)) {
+            return jsonError("القسم ليس من أقسام هذا المدير", 403);
+          }
+          const dept = await Department.findById(deptId);
+          if (!dept) return jsonError("القسم غير موجود");
+          departmentId = dept._id;
+        } else if (managedIds.length === 1) {
+          departmentId = new Types.ObjectId(managedIds[0]);
+        } else if (manager.departmentId) {
+          departmentId = manager.departmentId;
+        }
+        if (!departmentId) {
+          return jsonError("اختر قسمًا من أقسام المدير");
+        }
       }
-      const manager = await User.findOne({
-        _id: body.managerId,
-        role: "manager",
-        active: true,
+
+      const exists = await User.findOne({ email });
+      if (exists) return jsonError("البريد مستخدم مسبقًا");
+
+      const passwordHash = await bcrypt.hash(
+        String(body.password),
+        BCRYPT_ROUNDS
+      );
+      const created = await User.create({
+        name: String(body.name).trim(),
+        email,
+        passwordHash,
+        loginPassword: String(body.password),
+        role: "employee",
+        contractType,
+        departmentId,
+        managerId,
       });
-      if (!manager) return jsonError("المدير غير موجود", 404);
-      managerId = manager._id;
 
-      const managed = await getManagedDepartments(manager._id);
-      const managedIds = managed.map((d) => d._id);
+      const safe = await User.findById(created._id)
+        .select("-passwordHash")
+        .populate("departmentId", "name")
+        .populate("managerId", "name email")
+        .lean();
 
-      if (body.departmentId) {
-        if (!Types.ObjectId.isValid(String(body.departmentId))) {
-          return jsonError("معرّف القسم غير صالح");
-        }
-        const deptId = String(body.departmentId);
-        if (managedIds.length > 0 && !managedIds.includes(deptId)) {
-          return jsonError("القسم ليس من أقسام هذا المدير", 403);
-        }
-        const dept = await Department.findById(deptId);
-        if (!dept) return jsonError("القسم غير موجود");
-        departmentId = dept._id;
-      } else if (managedIds.length === 1) {
-        departmentId = new Types.ObjectId(managedIds[0]);
-      } else if (manager.departmentId) {
-        departmentId = manager.departmentId;
-      }
-      if (!departmentId) {
-        return jsonError("اختر قسمًا من أقسام المدير");
-      }
+      return jsonOk(safe, 201);
     }
 
     const exists = await User.findOne({ email });

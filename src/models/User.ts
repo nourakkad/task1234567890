@@ -1,5 +1,5 @@
 import { Schema, models, model, Types } from "mongoose";
-import type { UserRole } from "@/constants/lookups";
+import type { ContractType, UserRole } from "@/constants/lookups";
 
 export interface IUser {
   _id: Types.ObjectId;
@@ -9,6 +9,8 @@ export interface IUser {
   /** Plain login password for HR/CEO display only (set when they create/reset it). */
   loginPassword?: string | null;
   role: UserRole;
+  /** Employees only: internal (under a manager) or external (under CEO). */
+  contractType?: ContractType;
   departmentId?: Types.ObjectId | null;
   managerId?: Types.ObjectId | null;
   active: boolean;
@@ -29,6 +31,11 @@ const UserSchema = new Schema<IUser>(
       enum: ["general_manager", "ceo", "hr", "manager", "employee"],
       required: true,
     },
+    contractType: {
+      type: String,
+      enum: ["internal", "external"],
+      default: "internal",
+    },
     departmentId: { type: Schema.Types.ObjectId, ref: "Department", default: null },
     managerId: { type: Schema.Types.ObjectId, ref: "User", default: null },
     active: { type: Boolean, default: true },
@@ -40,5 +47,6 @@ const UserSchema = new Schema<IUser>(
 
 UserSchema.index({ role: 1, active: 1 });
 UserSchema.index({ managerId: 1, role: 1, active: 1 });
+UserSchema.index({ role: 1, contractType: 1, active: 1 });
 
 export const User = models.User || model<IUser>("User", UserSchema);

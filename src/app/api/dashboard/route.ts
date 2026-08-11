@@ -1,7 +1,6 @@
 import { Types } from "mongoose";
 import { connectDB } from "@/lib/db";
 import { jsonOk, handleApiError } from "@/lib/api";
-import { getVisibleTaskFilter } from "@/lib/permissions";
 import {
   buildTeamPerformance,
   currentMonthRange,
@@ -134,17 +133,24 @@ export async function GET() {
     const monthLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
     if (user.role === "ceo" || user.role === "general_manager") {
-      const [managers, employees, ceos] = await Promise.all([
+      const [managers, employees, ceos, hrs] = await Promise.all([
         User.find({ role: "manager", active: true }).select("_id name").lean(),
         User.find({ role: "employee", active: true }).select("_id").lean(),
         user.role === "general_manager"
           ? User.find({ role: "ceo", active: true }).select("_id").lean()
+          : Promise.resolve([]),
+        user.role === "ceo"
+          ? User.find({ role: "hr", active: true }).select("_id").lean()
           : Promise.resolve([]),
       ]);
 
       const managerIds = managers.map((m) => m._id);
       const employeeIds = employees.map((e) => e._id);
       const ceoIds = ceos.map((c) => c._id);
+      const hrIds = hrs.map((h) => h._id);
+      // CEO /track uses managerTasks=1 for managers + HR
+      const trackOwnerIds =
+        user.role === "ceo" ? [...managerIds, ...hrIds] : managerIds;
 
       const [
         kpis,
@@ -155,7 +161,7 @@ export async function GET() {
         teamPerformance,
       ] = await Promise.all([
         kpiFromMatch({}),
-        Task.countDocuments({ ownerId: { $in: managerIds } }),
+        Task.countDocuments({ ownerId: { $in: trackOwnerIds } }),
         Task.countDocuments({ ownerId: { $in: employeeIds } }),
         ceoIds.length
           ? Task.countDocuments({ ownerId: { $in: ceoIds } })
@@ -182,14 +188,15 @@ export async function GET() {
       });
     }
 
-    // Manager
-    const visibleFilter = await getVisibleTaskFilter(user);
+    // Manager — scope = inbox (owned) ∪ team-assigned (no department-wide leak)
     const ownerSelf = new Types.ObjectId(user.id);
     const teamMatch = {
       assignedById: ownerSelf,
       ownerId: { $ne: ownerSelf },
     };
-    const scope = { $or: [visibleFilter, teamMatch] };
+    const scope = {
+      $or: [{ ownerId: ownerSelf }, teamMatch],
+    };
 
     const [
       employees,
@@ -209,8 +216,9 @@ export async function GET() {
       kpiFromMatch(scope),
       Task.countDocuments({ ownerId: ownerSelf }),
       Task.countDocuments(teamMatch),
+      // Only team tasks waiting on this manager — not the manager's own inbox
       Task.countDocuments({
-        $and: [scope, { status: "بانتظار قرار الإدارة" }],
+        $and: [teamMatch, { status: "بانتظار قرار الإدارة" }],
       }),
       fetchNeedsAttention(scope, now),
     ]);

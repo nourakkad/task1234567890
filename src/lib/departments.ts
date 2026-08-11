@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { CEO_DEPARTMENT_NAME } from "@/constants/lookups";
 import { Department } from "@/models/Department";
 
 /** Departments this manager is responsible for (source of truth: Department.managerId). */
@@ -17,6 +18,21 @@ export async function getManagedDepartments(
     .sort({ name: 1 })
     .lean();
   return rows.map((d) => ({ _id: String(d._id), name: d.name }));
+}
+
+/** Find or create the system department for external-contract employees. */
+export async function ensureCeoDepartment(): Promise<{
+  _id: Types.ObjectId;
+  name: string;
+}> {
+  let dept = await Department.findOne({ name: CEO_DEPARTMENT_NAME });
+  if (!dept) {
+    dept = await Department.create({
+      name: CEO_DEPARTMENT_NAME,
+      managerId: null,
+    });
+  }
+  return { _id: dept._id, name: dept.name };
 }
 
 /**

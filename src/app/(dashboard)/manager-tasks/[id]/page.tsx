@@ -194,7 +194,7 @@ export default function ManagerTaskDetailPage() {
     <div>
       <PageHeader
         title={`${task.taskNo} — ${task.name}`}
-        subtitle="مهمة مُسندة من المدير التنفيذي — أضف تحديثك ونفّذ المطلوب"
+        subtitle="مهمة مُسندة من الإدارة — أضف تحديثك ونفّذ المطلوب"
         actions={
           <Link href="/manager-tasks" className="btn btn-secondary">
             العودة لمهام الإدارة
@@ -211,7 +211,7 @@ export default function ManagerTaskDetailPage() {
               </div>
               <h2 className="mt-1 text-2xl font-bold">{task.name}</h2>
               <p className="mt-1 text-sm text-[var(--muted)]">
-                من: {task.assignedById?.name || "المدير التنفيذي"} ·{" "}
+                من: {task.assignedById?.name || "الإدارة"} ·{" "}
                 {task.departmentId?.name || "—"}
               </p>
             </div>
@@ -234,7 +234,7 @@ export default function ManagerTaskDetailPage() {
 
           <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4">
             <div className="text-xs font-semibold text-amber-800">
-              قرار / أمر المدير التنفيذي
+              قرار / أمر الإدارة
             </div>
             <p className="mt-2 text-sm font-medium text-[var(--ink)]">
               {task.managementDecision ||

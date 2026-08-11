@@ -28,11 +28,6 @@ export const NAV_LINKS: Array<{
 
   // —— Inbox (tasks assigned to me) ——
   {
-    href: "/notifications",
-    label: "الإشعارات",
-    roles: ["general_manager", "ceo", "hr", "manager", "employee"],
-  },
-  {
     href: "/ceo-tasks",
     label: "مهام من المدير العام",
     roles: ["ceo"],
@@ -121,8 +116,7 @@ export function isNavActive(pathname: string, href: string) {
     href === "/tasks/new" ||
     href === "/team" ||
     href === "/account" ||
-    href === "/ceo-tasks" ||
-    href === "/notifications"
+    href === "/ceo-tasks"
   ) {
     return (
       pathname === href ||

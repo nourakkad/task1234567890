@@ -19,7 +19,6 @@ export default withAuth(
       role === "hr" &&
       !path.startsWith("/hr") &&
       !path.startsWith("/account") &&
-      !path.startsWith("/notifications") &&
       !path.startsWith("/api/")
     ) {
       if (
@@ -85,7 +84,6 @@ export const config = {
     "/departments/:path*",
     "/settings/:path*",
     "/account/:path*",
-    "/notifications/:path*",
     // API routes authenticate themselves via requireSessionUser (JSON 401).
     // Do not put /api in this matcher — withAuth redirects to HTML /login,
     // which breaks fetch().json() on iPhone Safari / PWA.

@@ -78,16 +78,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <NotificationBell />
-          <Link
-            href="/account"
-            className="menu-toggle"
-            aria-label="حسابي"
-          >
-            <UserIcon />
-          </Link>
-        </div>
+        <Link href="/account" className="menu-toggle" aria-label="حسابي">
+          <UserIcon />
+        </Link>
       </header>
 
       {/* Overlay */}
@@ -125,10 +118,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </h1>
             </div>
           </div>
-          <div className="lg:hidden">
+          <div className="flex shrink-0 items-center gap-1">
+            <NotificationBell variant="dark" />
             <button
               type="button"
-              className="menu-toggle mt-1 text-white"
+              className="menu-toggle mt-0.5 text-white lg:hidden"
               aria-label="إغلاق"
               onClick={() => setOpen(false)}
             >
@@ -158,14 +152,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="shrink-0 border-t border-white/10 p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold">{data?.user?.name}</div>
-              <div className="mt-0.5 text-xs text-[var(--sidebar-muted)]">
-                {role ? ROLE_LABELS[role] : ""}
-              </div>
+          <div className="mb-3 min-w-0">
+            <div className="text-sm font-semibold">{data?.user?.name}</div>
+            <div className="mt-0.5 text-xs text-[var(--sidebar-muted)]">
+              {role ? ROLE_LABELS[role] : ""}
             </div>
-            <NotificationBell variant="dark" />
           </div>
           <Link
             href="/account"

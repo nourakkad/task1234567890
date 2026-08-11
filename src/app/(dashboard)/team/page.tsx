@@ -12,7 +12,7 @@ import { PasswordField } from "@/components/PasswordField";
 import { matchesSearch, SearchField } from "@/components/SearchField";
 import { LoginPasswordLine } from "@/components/LoginPasswordLine";
 import { useSuccessToast } from "@/components/SuccessToast";
-import { ROLE_LABELS, type UserRole } from "@/constants/lookups";
+import { ROLE_LABELS, type ContractType, type UserRole } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatScoreAvg } from "@/lib/format";
 
@@ -21,6 +21,7 @@ interface TeamUser {
   name: string;
   email: string;
   role: UserRole;
+  contractType?: ContractType;
   loginPassword?: string | null;
   departmentId?: { name?: string };
   managerId?: { name?: string };
@@ -470,7 +471,9 @@ function Section({
               </div>
               {showManager ? (
                 <div className="text-sm text-[var(--muted)]">
-                  المدير: {u.managerId?.name || "—"}
+                  {u.role === "employee" && u.contractType === "external"
+                    ? "تحت المدير التنفيذي مباشرة"
+                    : `المدير: ${u.managerId?.name || "—"}`}
                 </div>
               ) : null}
               {canManage ? (

@@ -12,6 +12,11 @@ import { PasswordField } from "@/components/PasswordField";
 import { matchesSearch, SearchField } from "@/components/SearchField";
 import { LoginPasswordLine } from "@/components/LoginPasswordLine";
 import { useSuccessToast } from "@/components/SuccessToast";
+import {
+  CEO_DEPARTMENT_NAME,
+  CONTRACT_TYPE_LABELS,
+  type ContractType,
+} from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
 
 interface TeamUser {
@@ -19,6 +24,7 @@ interface TeamUser {
   name: string;
   email: string;
   role: string;
+  contractType?: ContractType;
   loginPassword?: string | null;
   departmentId?: { _id?: string; name?: string };
   managerId?: { _id?: string; name?: string };
@@ -39,12 +45,15 @@ export default function HrEmployeesPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [contractType, setContractType] = useState<ContractType>("internal");
   const [managerId, setManagerId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [editing, setEditing] = useState<TeamUser | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPassword, setEditPassword] = useState("");
+  const [editContractType, setEditContractType] =
+    useState<ContractType>("internal");
   const [editManagerId, setEditManagerId] = useState("");
   const [editDeptId, setEditDeptId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -65,7 +74,11 @@ export default function HrEmployeesPage() {
             u.name,
             u.email,
             u.managerId?.name,
-            u.departmentId?.name
+            u.departmentId?.name,
+            u.contractType === "external"
+              ? CONTRACT_TYPE_LABELS.external
+              : CONTRACT_TYPE_LABELS.internal,
+            u.contractType === "external" ? CEO_DEPARTMENT_NAME : ""
           )
       ),
     [users, query]
@@ -89,6 +102,11 @@ export default function HrEmployeesPage() {
   }, [status, session?.user?.role, router]);
 
   useEffect(() => {
+    if (contractType === "external") {
+      setManagerId("");
+      setDepartmentId("");
+      return;
+    }
     const mgr = managers.find((m) => m._id === managerId);
     if (!mgr) return;
     const managed = mgr.managedDepartments || [];
@@ -103,7 +121,7 @@ export default function HrEmployeesPage() {
     ) {
       setDepartmentId("");
     }
-  }, [managerId, managers, departmentId]);
+  }, [contractType, managerId, managers, departmentId]);
 
   const createDeptOptions = useMemo(() => {
     const mgr = managers.find((m) => m._id === managerId);
@@ -125,8 +143,12 @@ export default function HrEmployeesPage() {
     e.preventDefault();
     setError("");
     setMessage("");
-    if (!managerId) {
+    if (contractType === "internal" && !managerId) {
       setError("اختر المدير المسؤول");
+      return;
+    }
+    if (contractType === "internal" && !departmentId) {
+      setError("اختر القسم");
       return;
     }
     const formEl = e.currentTarget;
@@ -138,10 +160,16 @@ export default function HrEmployeesPage() {
         email: form.get("email"),
         password: form.get("password"),
         role: "employee",
-        managerId,
-        departmentId: departmentId || undefined,
+        contractType,
+        ...(contractType === "internal"
+          ? {
+              managerId,
+              departmentId: departmentId || undefined,
+            }
+          : {}),
       });
       formEl.reset();
+      setContractType("internal");
       setManagerId("");
       setDepartmentId("");
       await load();
@@ -158,6 +186,7 @@ export default function HrEmployeesPage() {
     setEditName(u.name);
     setEditEmail(u.email);
     setEditPassword("");
+    setEditContractType(u.contractType === "external" ? "external" : "internal");
     setEditManagerId(u.managerId?._id || "");
     setEditDeptId(u.departmentId?._id || "");
   }
@@ -165,14 +194,27 @@ export default function HrEmployeesPage() {
   async function onSaveEdit(e: FormEvent) {
     e.preventDefault();
     if (!editing) return;
+    if (editContractType === "internal" && !editManagerId) {
+      setError("اختر المدير المسؤول");
+      return;
+    }
+    if (editContractType === "internal" && !editDeptId) {
+      setError("اختر القسم");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
       await apiSend(`/api/team/${editing._id}`, "PATCH", {
         name: editName,
         email: editEmail,
-        managerId: editManagerId,
-        departmentId: editDeptId,
+        contractType: editContractType,
+        ...(editContractType === "internal"
+          ? {
+              managerId: editManagerId,
+              departmentId: editDeptId,
+            }
+          : {}),
         ...(editPassword.trim() ? { password: editPassword } : {}),
       });
       await load();
@@ -202,6 +244,10 @@ export default function HrEmployeesPage() {
     }
   }
 
+  const canSubmitInternal = managers.length > 0;
+  const createDisabled =
+    loading || (contractType === "internal" && !canSubmitInternal);
+
   if (status === "loading" || session?.user?.role !== "hr") {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;
   }
@@ -210,7 +256,7 @@ export default function HrEmployeesPage() {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="إدارة الموظفين"
-        subtitle="إنشاء وتعديل وحذف حسابات الموظفين وربطهم بمدير وقسم"
+        subtitle="إنشاء وتعديل وحذف حسابات الموظفين وربطهم بمدير وقسم أو بالمدير التنفيذي للعقود الخارجية"
       />
       {error ? <p className="mb-3 text-[var(--danger)]">{error}</p> : null}
       {message ? <p className="mb-3 text-[var(--ok)]">{message}</p> : null}
@@ -218,7 +264,7 @@ export default function HrEmployeesPage() {
       <SearchField
         value={query}
         onChange={setQuery}
-        placeholder="الاسم، البريد، المدير، القسم..."
+        placeholder="الاسم، البريد، المدير، القسم، نوع العقد..."
       />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
@@ -230,22 +276,45 @@ export default function HrEmployeesPage() {
                 : "لا يوجد موظفون بعد"}
             </div>
           ) : (
-            employees.map((u) => (
-              <article key={u._id} className="card flex flex-wrap items-center justify-between gap-3 p-4">
-                <div>
-                  <div className="font-semibold">{u.name}</div>
-                  <div className="text-sm text-[var(--muted)]">{u.email}</div>
-                  <LoginPasswordLine password={u.loginPassword} />
-                  <div className="mt-1 text-sm">
-                    {u.managerId?.name || "بدون مدير"} · {u.departmentId?.name || "بدون قسم"}
+            employees.map((u) => {
+              const isExternal = u.contractType === "external";
+              return (
+                <article
+                  key={u._id}
+                  className="card flex flex-wrap items-center justify-between gap-3 p-4"
+                >
+                  <div>
+                    <div className="font-semibold">{u.name}</div>
+                    <div className="text-sm text-[var(--muted)]">{u.email}</div>
+                    <LoginPasswordLine password={u.loginPassword} />
+                    <div className="mt-1 text-sm">
+                      {CONTRACT_TYPE_LABELS[isExternal ? "external" : "internal"]}
+                      {" · "}
+                      {isExternal
+                        ? `تحت ${CEO_DEPARTMENT_NAME} مباشرة`
+                        : `${u.managerId?.name || "بدون مدير"} · ${u.departmentId?.name || "بدون قسم"}`}
+                    </div>
                   </div>
-                </div>
-                <div className="flex gap-2">
-                  <button type="button" className="btn btn-secondary text-sm" onClick={() => openEdit(u)}>تعديل</button>
-                  <button type="button" className="btn btn-danger text-sm" disabled={busy} onClick={() => setPendingDelete(u)}>حذف</button>
-                </div>
-              </article>
-            ))
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-secondary text-sm"
+                      onClick={() => openEdit(u)}
+                    >
+                      تعديل
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger text-sm"
+                      disabled={busy}
+                      onClick={() => setPendingDelete(u)}
+                    >
+                      حذف
+                    </button>
+                  </div>
+                </article>
+              );
+            })
           )}
         </div>
 
@@ -259,75 +328,185 @@ export default function HrEmployeesPage() {
             <label>البريد</label>
             <input name="email" type="email" required />
           </div>
-          <PasswordField name="password" label="كلمة المرور" required minLength={10} autoComplete="new-password" />
+          <PasswordField
+            name="password"
+            label="كلمة المرور"
+            required
+            minLength={10}
+            autoComplete="new-password"
+          />
           <div className="field">
-            <label>المدير المسؤول</label>
-            <select value={managerId} onChange={(e) => setManagerId(e.target.value)} required>
-              <option value="">— اختر —</option>
-              {managers.map((m) => (
-                <option key={m._id} value={m._id}>
-                  {m.name}
-                  {m.managedDepartments && m.managedDepartments.length > 0
-                    ? ` (${m.managedDepartments.map((d) => d.name).join("، ")})`
-                    : m.departmentId?.name
-                      ? ` (${m.departmentId.name})`
-                      : ""}
-                </option>
-              ))}
+            <label>نوع العقد</label>
+            <select
+              value={contractType}
+              onChange={(e) =>
+                setContractType(e.target.value as ContractType)
+              }
+            >
+              <option value="internal">{CONTRACT_TYPE_LABELS.internal}</option>
+              <option value="external">{CONTRACT_TYPE_LABELS.external}</option>
             </select>
           </div>
-          <div className="field">
-            <label>القسم</label>
-            <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} required>
-              <option value="">— اختر —</option>
-              {createDeptOptions.map((d) => (
-                <option key={d._id} value={d._id}>{d.name}</option>
-              ))}
-            </select>
-          </div>
-          <button type="submit" className="btn btn-primary w-full" disabled={loading || !managers.length}>
+          {contractType === "external" ? (
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-3 text-sm">
+              <div className="font-semibold">تحت المدير التنفيذي مباشرة</div>
+              <div className="mt-1 text-[var(--muted)]">
+                القسم: {CEO_DEPARTMENT_NAME} — لا يلزم اختيار مدير
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="field">
+                <label>المدير المسؤول</label>
+                <select
+                  value={managerId}
+                  onChange={(e) => setManagerId(e.target.value)}
+                  required
+                >
+                  <option value="">— اختر —</option>
+                  {managers.map((m) => (
+                    <option key={m._id} value={m._id}>
+                      {m.name}
+                      {m.managedDepartments && m.managedDepartments.length > 0
+                        ? ` (${m.managedDepartments.map((d) => d.name).join("، ")})`
+                        : m.departmentId?.name
+                          ? ` (${m.departmentId.name})`
+                          : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>القسم</label>
+                <select
+                  value={departmentId}
+                  onChange={(e) => setDepartmentId(e.target.value)}
+                  required
+                >
+                  <option value="">— اختر —</option>
+                  {createDeptOptions.map((d) => (
+                    <option key={d._id} value={d._id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+          <button
+            type="submit"
+            className="btn btn-primary w-full"
+            disabled={createDisabled}
+          >
             {loading ? "جارٍ الحفظ..." : "حفظ الموظف"}
           </button>
-          {!managers.length ? (
-            <p className="text-xs text-[var(--muted)]">أضف مديرًا أولًا من صفحة المدراء</p>
+          {contractType === "internal" && !managers.length ? (
+            <p className="text-xs text-[var(--muted)]">
+              أضف مديرًا أولًا من صفحة المدراء
+            </p>
           ) : null}
         </form>
       </div>
 
       {editing ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditing(null)}>
-          <form className="card w-full max-w-lg space-y-3 p-5" onClick={(e) => e.stopPropagation()} onSubmit={onSaveEdit}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setEditing(null)}
+        >
+          <form
+            className="card w-full max-w-lg space-y-3 p-5"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={onSaveEdit}
+          >
             <h3 className="text-lg font-semibold">تعديل الموظف</h3>
             <div className="field">
               <label>الاسم</label>
-              <input value={editName} onChange={(e) => setEditName(e.target.value)} required />
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                required
+              />
             </div>
             <div className="field">
               <label>البريد</label>
-              <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} required />
+              <input
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                required
+              />
             </div>
             <div className="field">
-              <label>المدير</label>
-              <select value={editManagerId} onChange={(e) => setEditManagerId(e.target.value)} required>
-                <option value="">— اختر —</option>
-                {managers.map((m) => (
-                  <option key={m._id} value={m._id}>{m.name}</option>
-                ))}
+              <label>نوع العقد</label>
+              <select
+                value={editContractType}
+                onChange={(e) =>
+                  setEditContractType(e.target.value as ContractType)
+                }
+              >
+                <option value="internal">{CONTRACT_TYPE_LABELS.internal}</option>
+                <option value="external">{CONTRACT_TYPE_LABELS.external}</option>
               </select>
             </div>
-            <div className="field">
-              <label>القسم</label>
-              <select value={editDeptId} onChange={(e) => setEditDeptId(e.target.value)} required>
-                <option value="">— اختر —</option>
-                {editDeptOptions.map((d) => (
-                  <option key={d._id} value={d._id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-            <PasswordField label="كلمة مرور جديدة (اختياري)" value={editPassword} onChange={(e) => setEditPassword(e.target.value)} minLength={10} autoComplete="new-password" />
+            {editContractType === "external" ? (
+              <div className="rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-3 text-sm">
+                <div className="font-semibold">تحت المدير التنفيذي مباشرة</div>
+                <div className="mt-1 text-[var(--muted)]">
+                  القسم: {CEO_DEPARTMENT_NAME}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="field">
+                  <label>المدير</label>
+                  <select
+                    value={editManagerId}
+                    onChange={(e) => setEditManagerId(e.target.value)}
+                    required
+                  >
+                    <option value="">— اختر —</option>
+                    {managers.map((m) => (
+                      <option key={m._id} value={m._id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>القسم</label>
+                  <select
+                    value={editDeptId}
+                    onChange={(e) => setEditDeptId(e.target.value)}
+                    required
+                  >
+                    <option value="">— اختر —</option>
+                    {editDeptOptions.map((d) => (
+                      <option key={d._id} value={d._id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+            <PasswordField
+              label="كلمة مرور جديدة (اختياري)"
+              value={editPassword}
+              onChange={(e) => setEditPassword(e.target.value)}
+              minLength={10}
+              autoComplete="new-password"
+            />
             <div className="flex gap-2">
-              <button type="submit" className="btn btn-primary" disabled={busy}>حفظ</button>
-              <button type="button" className="btn btn-secondary" onClick={() => setEditing(null)}>إلغاء</button>
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                حفظ
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setEditing(null)}
+              >
+                إلغاء
+              </button>
             </div>
           </form>
         </div>

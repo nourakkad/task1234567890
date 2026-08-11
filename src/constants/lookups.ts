@@ -79,6 +79,17 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   employee: "موظف",
 };
 
+export const CONTRACT_TYPES = ["internal", "external"] as const;
+export type ContractType = (typeof CONTRACT_TYPES)[number];
+
+export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
+  internal: "عقد داخلي",
+  external: "عقد خارجي",
+};
+
+/** System department for external-contract employees under the CEO. */
+export const CEO_DEPARTMENT_NAME = "المدير التنفيذي";
+
 export const DEPARTMENT_NAMES = [
   "المشتريات",
   "اللوجستيات",

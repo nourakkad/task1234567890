@@ -13,6 +13,7 @@ interface AssignableUser {
   _id: string;
   name: string;
   role: string;
+  contractType?: string;
   departmentId?: { _id: string; name: string } | string | null;
   managedDepartments?: Array<{ _id: string; name: string }>;
 }
@@ -50,9 +51,12 @@ export default function NewTaskPage() {
   });
 
   const selectedOwner = users.find((u) => u._id === form.ownerId);
+  const isExternalOwner =
+    selectedOwner?.role === "employee" &&
+    selectedOwner.contractType === "external";
   const ownerNeedsNoDept =
     selectedOwner?.role === "ceo" || selectedOwner?.role === "hr";
-  const deptRequired = !ownerNeedsNoDept;
+  const deptRequired = !ownerNeedsNoDept && !isExternalOwner;
 
   useEffect(() => {
     if (authStatus === "loading") {
@@ -125,6 +129,20 @@ export default function NewTaskPage() {
       const managed = selectedOwner.managedDepartments || [];
       if (managed.length > 0) return managed;
     }
+    if (
+      selectedOwner?.role === "employee" &&
+      selectedOwner.contractType === "external" &&
+      selectedOwner.departmentId
+    ) {
+      const dept =
+        typeof selectedOwner.departmentId === "string"
+          ? departments.find((d) => d._id === selectedOwner.departmentId)
+          : {
+              _id: selectedOwner.departmentId._id,
+              name: selectedOwner.departmentId.name,
+            };
+      return dept ? [dept] : departments;
+    }
     return departments;
   }, [
     isManager,
@@ -185,19 +203,19 @@ export default function NewTaskPage() {
   const title = isGm
     ? "تكليف تنفيذي / موارد بشرية / مدير"
     : isCeo
-      ? "تكليف موارد بشرية أو مدير"
+      ? "تكليف موارد بشرية أو مدير أو عقد خارجي"
       : "تكليف موظف بمهمة";
 
   const subtitle = isGm
-    ? "المدير العام يسند المهام للمدير التنفيذي والموارد البشرية والمدراء"
+    ? "المدير العام يسند المهام للمدير التنفيذي والموارد البشرية والمدراء وموظفي العقود الخارجية"
     : isCeo
-      ? "المدير التنفيذي يسند المهام للموارد البشرية والمدراء"
+      ? "المدير التنفيذي يسند المهام للموارد البشرية والمدراء وموظفي العقود الخارجية"
       : "المدير يسند المهام لموظفي فريقه مع قرار/أمر واضح";
 
   const ownerLabel = isGm
-    ? "المسؤول (تنفيذي / موارد بشرية / مدير)"
+    ? "المسؤول (تنفيذي / موارد بشرية / مدير / عقد خارجي)"
     : isCeo
-      ? "المسؤول (موارد بشرية / مدير)"
+      ? "المسؤول (موارد بشرية / مدير / عقد خارجي)"
       : "الموظف المسؤول";
 
   if (authStatus === "loading") {
@@ -250,23 +268,33 @@ export default function NewTaskPage() {
         </div>
         <div className="field">
           <label>
-            القسم{deptRequired ? "" : " (اختياري للتنفيذي / الموارد البشرية)"}
+            {isExternalOwner
+              ? "التصنيف"
+              : `القسم${deptRequired ? "" : " (اختياري للتنفيذي / الموارد البشرية)"}`}
           </label>
-          <select
-            required={deptRequired}
-            value={form.departmentId}
-            onChange={(e) => setForm({ ...form, departmentId: e.target.value })}
-            disabled={isManager && availableDepartments.length <= 1}
-          >
-            <option value="">
-              {ownerNeedsNoDept ? "بدون قسم / اختياري" : "اختر..."}
-            </option>
-            {availableDepartments.map((d) => (
-              <option key={d._id} value={d._id}>
-                {d.name}
+          {isExternalOwner ? (
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-2.5 text-sm font-semibold text-[var(--brand)]">
+              عقد خارجي
+            </div>
+          ) : (
+            <select
+              required={deptRequired}
+              value={form.departmentId}
+              onChange={(e) =>
+                setForm({ ...form, departmentId: e.target.value })
+              }
+              disabled={isManager && availableDepartments.length <= 1}
+            >
+              <option value="">
+                {ownerNeedsNoDept ? "بدون قسم / اختياري" : "اختر..."}
               </option>
-            ))}
-          </select>
+              {availableDepartments.map((d) => (
+                <option key={d._id} value={d._id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="field">
           <label>الأولوية</label>

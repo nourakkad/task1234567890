@@ -1,11 +1,17 @@
 "use client";
 
-import { ROLE_LABELS, type UserRole } from "@/constants/lookups";
+import {
+  CONTRACT_TYPE_LABELS,
+  ROLE_LABELS,
+  type ContractType,
+  type UserRole,
+} from "@/constants/lookups";
 
 export interface AssigneeOption {
   _id: string;
   name: string;
   role: string;
+  contractType?: ContractType | string;
   departmentId?: { _id?: string; name?: string } | string | null;
 }
 
@@ -44,8 +50,9 @@ export function AssigneePicker({
     >
       {users.map((u) => {
         const selected = value === u._id;
-        const roleLabel =
-          ROLE_LABELS[u.role as UserRole] || u.role;
+        const isExternal =
+          u.role === "employee" && u.contractType === "external";
+        const roleLabel = ROLE_LABELS[u.role as UserRole] || u.role;
         const deptName =
           typeof u.departmentId === "object" && u.departmentId?.name
             ? u.departmentId.name
@@ -65,9 +72,16 @@ export function AssigneePicker({
             }`}
           >
             <div className="font-semibold">{u.name}</div>
-            <div className="mt-0.5 text-xs text-[var(--muted)]">
-              {roleLabel}
-              {deptName ? ` · ${deptName}` : ""}
+            <div
+              className={`mt-0.5 text-xs ${
+                isExternal
+                  ? "font-semibold text-[var(--brand)]"
+                  : "text-[var(--muted)]"
+              }`}
+            >
+              {isExternal
+                ? `${ROLE_LABELS.employee} · ${CONTRACT_TYPE_LABELS.external}`
+                : [roleLabel, deptName].filter(Boolean).join(" · ")}
             </div>
           </button>
         );

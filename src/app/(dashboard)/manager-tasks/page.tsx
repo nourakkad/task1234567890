@@ -87,7 +87,7 @@ export default function ManagerTasksPage() {
     <div>
       <PageHeader
         title="مهام من الإدارة"
-        subtitle="المهام المسندة إليك من المدير التنفيذي"
+        subtitle="المهام المسندة إليك من الإدارة العليا"
       />
 
       <TaskFilters

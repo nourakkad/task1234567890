@@ -13,16 +13,22 @@ export async function GET() {
     let filter: Record<string, unknown> = { active: true };
 
     if (user.role === "general_manager") {
-      // GM assigns to CEO, HR, and managers
+      // GM assigns to CEO, HR, managers, and external-contract employees
       filter = {
         active: true,
-        role: { $in: ["ceo", "hr", "manager"] },
+        $or: [
+          { role: { $in: ["ceo", "hr", "manager"] } },
+          { role: "employee", contractType: "external" },
+        ],
       };
     } else if (user.role === "ceo") {
-      // CEO assigns to HR and managers
+      // CEO assigns to HR, managers, and external-contract employees
       filter = {
         active: true,
-        role: { $in: ["hr", "manager"] },
+        $or: [
+          { role: { $in: ["hr", "manager"] } },
+          { role: "employee", contractType: "external" },
+        ],
       };
     } else if (user.role === "manager") {
       // Only employees assigned to this manager
@@ -38,7 +44,7 @@ export async function GET() {
     }
 
     const users = await User.find(filter)
-      .select("name email role departmentId managerId")
+      .select("name email role departmentId managerId contractType")
       .populate("departmentId", "name")
       .sort({ role: 1, name: 1 })
       .lean();
@@ -61,33 +67,48 @@ export async function GET() {
       }
     }
 
-    // Normalize ids for mobile clients (avoid ObjectId edge cases)
-    const payload = users.map((u) => ({
-      _id: String(u._id),
-      name: u.name,
-      email: u.email,
-      role: u.role,
-      departmentId: u.departmentId
-        ? {
-            _id: String(
-              typeof u.departmentId === "object" &&
+    // Managers → HR → external-contract employees (clear for CEO/GM pickers)
+    const roleOrder = (role: string, contractType?: string) => {
+      if (role === "ceo") return 0;
+      if (role === "manager") return 1;
+      if (role === "hr") return 2;
+      if (role === "employee" && contractType === "external") return 3;
+      return 9;
+    };
+    const payload = users
+      .map((u) => ({
+        _id: String(u._id),
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        contractType: u.contractType || "internal",
+        departmentId: u.departmentId
+          ? {
+              _id: String(
+                typeof u.departmentId === "object" &&
+                  u.departmentId &&
+                  "_id" in u.departmentId
+                  ? (u.departmentId as { _id: unknown })._id
+                  : u.departmentId
+              ),
+              name:
+                typeof u.departmentId === "object" &&
                 u.departmentId &&
-                "_id" in u.departmentId
-                ? (u.departmentId as { _id: unknown })._id
-                : u.departmentId
-            ),
-            name:
-              typeof u.departmentId === "object" &&
-              u.departmentId &&
-              "name" in u.departmentId
-                ? String((u.departmentId as { name?: unknown }).name || "")
-                : "",
-          }
-        : null,
-      managerId: u.managerId ? String(u.managerId) : null,
-      managedDepartments:
-        u.role === "manager" ? managedBy.get(String(u._id)) || [] : undefined,
-    }));
+                "name" in u.departmentId
+                  ? String((u.departmentId as { name?: unknown }).name || "")
+                  : "",
+            }
+          : null,
+        managerId: u.managerId ? String(u.managerId) : null,
+        managedDepartments:
+          u.role === "manager" ? managedBy.get(String(u._id)) || [] : undefined,
+      }))
+      .sort((a, b) => {
+        const oa = roleOrder(a.role, a.contractType);
+        const ob = roleOrder(b.role, b.contractType);
+        if (oa !== ob) return oa - ob;
+        return a.name.localeCompare(b.name, "ar");
+      });
 
     return jsonOk(payload);
   } catch (error) {

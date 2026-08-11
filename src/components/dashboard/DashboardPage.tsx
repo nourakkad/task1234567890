@@ -166,7 +166,7 @@ export default function DashboardPage() {
           ...(isGm
             ? [{ key: "ceoTasks", label: "مهام المدير التنفيذي" }]
             : []),
-          { key: "managerTasks", label: "مهام المدراء" },
+          { key: "managerTasks", label: isGm ? "مهام المدراء" : "مهام المدراء والموارد البشرية" },
           { key: "employeeTasks", label: "مهام الموظفين" },
           { key: "waitingManagement", label: "بانتظار قرار الإدارة" },
           { key: "inProgress", label: "قيد التنفيذ" },
