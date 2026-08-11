@@ -2,6 +2,7 @@
 
 import {
   ROLE_LABELS,
+  type ContractType,
   type UserRole,
 } from "@/constants/lookups";
 
