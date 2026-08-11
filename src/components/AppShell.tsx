@@ -120,14 +120,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <NotificationBell variant="dark" />
-            <button
-              type="button"
-              className="menu-toggle mt-0.5 text-white lg:hidden"
-              aria-label="إغلاق"
-              onClick={() => setOpen(false)}
-            >
-              <CloseIcon />
-            </button>
           </div>
         </div>
 
