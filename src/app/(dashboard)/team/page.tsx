@@ -4,8 +4,14 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
+import {
+  ConfirmDialog,
+  deleteUserConfirmMessage,
+} from "@/components/ConfirmDialog";
 import { PasswordField } from "@/components/PasswordField";
 import { matchesSearch, SearchField } from "@/components/SearchField";
+import { LoginPasswordLine } from "@/components/LoginPasswordLine";
+import { useSuccessToast } from "@/components/SuccessToast";
 import { ROLE_LABELS, type UserRole } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatScoreAvg } from "@/lib/format";
@@ -15,8 +21,10 @@ interface TeamUser {
   name: string;
   email: string;
   role: UserRole;
+  loginPassword?: string | null;
   departmentId?: { name?: string };
   managerId?: { name?: string };
+  managedDepartments?: Array<{ _id: string; name: string }>;
   avgScore?: number | null;
   reviewCount?: number;
 }
@@ -30,6 +38,7 @@ interface Department {
 export default function TeamViewPage() {
   const { data: session, status: authStatus } = useSession();
   const router = useRouter();
+  const showSuccess = useSuccessToast();
   const [users, setUsers] = useState<TeamUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [performanceMonth, setPerformanceMonth] = useState("");
@@ -41,6 +50,7 @@ export default function TeamViewPage() {
   const [editEmail, setEditEmail] = useState("");
   const [editPassword, setEditPassword] = useState("");
   const [query, setQuery] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<TeamUser | null>(null);
   const role = session?.user?.role;
 
   const load = useCallback(async () => {
@@ -90,6 +100,7 @@ export default function TeamViewPage() {
             u.name,
             u.email,
             u.departmentId?.name,
+            ...(u.managedDepartments?.map((d) => d.name) || []),
             ROLE_LABELS[u.role]
           )
       ),
@@ -124,7 +135,8 @@ export default function TeamViewPage() {
     setBusy(true);
     setError("");
     setMessage("");
-    const form = new FormData(e.currentTarget);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     try {
       await apiSend("/api/team", "POST", {
         name: form.get("name"),
@@ -132,9 +144,9 @@ export default function TeamViewPage() {
         password: form.get("password"),
         role: "hr",
       });
-      e.currentTarget.reset();
+      formEl.reset();
       await load();
-      setMessage("تم إضافة حساب الموارد البشرية");
+      showSuccess("تم إضافة حساب الموارد البشرية بنجاح");
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل الإضافة");
     } finally {
@@ -173,14 +185,15 @@ export default function TeamViewPage() {
     }
   }
 
-  async function onDeleteHr(u: TeamUser) {
-    if (!window.confirm(`حذف حساب الموارد البشرية «${u.name}»؟`)) return;
+  async function onDeleteHr() {
+    if (!pendingDelete) return;
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      await apiSend(`/api/team/${u._id}`, "DELETE");
-      if (editingHr?._id === u._id) setEditingHr(null);
+      await apiSend(`/api/team/${pendingDelete._id}`, "DELETE");
+      if (editingHr?._id === pendingDelete._id) setEditingHr(null);
+      setPendingDelete(null);
       await load();
       setMessage("تم حذف حساب الموارد البشرية");
     } catch (err) {
@@ -236,8 +249,9 @@ export default function TeamViewPage() {
             users={hrUsers}
             showManager={false}
             showRating
+            showPassword
             onEdit={openEditHr}
-            onDelete={onDeleteHr}
+            onDelete={(u) => setPendingDelete(u)}
             busy={busy}
           />
           <form onSubmit={onCreateHr} className="card h-fit space-y-3 p-4">
@@ -275,6 +289,7 @@ export default function TeamViewPage() {
           users={managers}
           showManager={false}
           showRating
+          showPassword
         />
       ) : null}
       <Section
@@ -283,6 +298,7 @@ export default function TeamViewPage() {
         users={employees}
         showManager={isCeo}
         showRating
+        showPassword={isCeo}
       />
 
       {isCeo && departments.length > 0 ? (
@@ -364,6 +380,24 @@ export default function TeamViewPage() {
           </form>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="تأكيد حذف حساب الموارد البشرية"
+        message={
+          pendingDelete
+            ? deleteUserConfirmMessage(
+                "حساب الموارد البشرية",
+                pendingDelete.name
+              )
+            : ""
+        }
+        busy={busy}
+        onCancel={() => {
+          if (!busy) setPendingDelete(null);
+        }}
+        onConfirm={onDeleteHr}
+      />
     </div>
   );
 }
@@ -374,6 +408,7 @@ function Section({
   users,
   showManager,
   showRating,
+  showPassword,
   onEdit,
   onDelete,
   busy,
@@ -383,6 +418,7 @@ function Section({
   users: TeamUser[];
   showManager: boolean;
   showRating?: boolean;
+  showPassword?: boolean;
   onEdit?: (u: TeamUser) => void;
   onDelete?: (u: TeamUser) => void;
   busy?: boolean;
@@ -404,6 +440,9 @@ function Section({
                   <div className="break-all text-sm text-[var(--muted)]">
                     {u.email}
                   </div>
+                  {showPassword ? (
+                    <LoginPasswordLine password={u.loginPassword} />
+                  ) : null}
                 </div>
                 {showRating ? (
                   <div className="shrink-0 text-end">
@@ -422,7 +461,11 @@ function Section({
               <div className="flex flex-wrap gap-2 text-sm">
                 <span className="badge badge-teal">{ROLE_LABELS[u.role]}</span>
                 <span className="badge badge-slate">
-                  {u.departmentId?.name || "بدون قسم"}
+                  {u.role === "manager" &&
+                  u.managedDepartments &&
+                  u.managedDepartments.length > 0
+                    ? u.managedDepartments.map((d) => d.name).join(" · ")
+                    : u.departmentId?.name || "بدون قسم"}
                 </span>
               </div>
               {showManager ? (

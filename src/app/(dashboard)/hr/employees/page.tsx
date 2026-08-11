@@ -4,8 +4,14 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
+import {
+  ConfirmDialog,
+  deleteUserConfirmMessage,
+} from "@/components/ConfirmDialog";
 import { PasswordField } from "@/components/PasswordField";
 import { matchesSearch, SearchField } from "@/components/SearchField";
+import { LoginPasswordLine } from "@/components/LoginPasswordLine";
+import { useSuccessToast } from "@/components/SuccessToast";
 import { apiGet, apiSend } from "@/lib/client";
 
 interface TeamUser {
@@ -13,8 +19,10 @@ interface TeamUser {
   name: string;
   email: string;
   role: string;
+  loginPassword?: string | null;
   departmentId?: { _id?: string; name?: string };
   managerId?: { _id?: string; name?: string };
+  managedDepartments?: Array<{ _id: string; name: string }>;
 }
 
 interface Department {
@@ -25,6 +33,7 @@ interface Department {
 export default function HrEmployeesPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const showSuccess = useSuccessToast();
   const [users, setUsers] = useState<TeamUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [error, setError] = useState("");
@@ -40,6 +49,7 @@ export default function HrEmployeesPage() {
   const [editDeptId, setEditDeptId] = useState("");
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<TeamUser | null>(null);
 
   const managers = useMemo(
     () => users.filter((u) => u.role === "manager"),
@@ -80,8 +90,36 @@ export default function HrEmployeesPage() {
 
   useEffect(() => {
     const mgr = managers.find((m) => m._id === managerId);
-    if (mgr?.departmentId?._id) setDepartmentId(mgr.departmentId._id);
-  }, [managerId, managers]);
+    if (!mgr) return;
+    const managed = mgr.managedDepartments || [];
+    if (managed.length === 1) {
+      setDepartmentId(managed[0]._id);
+    } else if (mgr.departmentId?._id && managed.length === 0) {
+      setDepartmentId(mgr.departmentId._id);
+    } else if (
+      departmentId &&
+      managed.length > 0 &&
+      !managed.some((d) => d._id === departmentId)
+    ) {
+      setDepartmentId("");
+    }
+  }, [managerId, managers, departmentId]);
+
+  const createDeptOptions = useMemo(() => {
+    const mgr = managers.find((m) => m._id === managerId);
+    if (mgr?.managedDepartments && mgr.managedDepartments.length > 0) {
+      return mgr.managedDepartments;
+    }
+    return departments;
+  }, [managers, managerId, departments]);
+
+  const editDeptOptions = useMemo(() => {
+    const mgr = managers.find((m) => m._id === editManagerId);
+    if (mgr?.managedDepartments && mgr.managedDepartments.length > 0) {
+      return mgr.managedDepartments;
+    }
+    return departments;
+  }, [managers, editManagerId, departments]);
 
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -91,7 +129,8 @@ export default function HrEmployeesPage() {
       setError("اختر المدير المسؤول");
       return;
     }
-    const form = new FormData(e.currentTarget);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     setLoading(true);
     try {
       await apiSend("/api/team", "POST", {
@@ -102,11 +141,11 @@ export default function HrEmployeesPage() {
         managerId,
         departmentId: departmentId || undefined,
       });
-      e.currentTarget.reset();
+      formEl.reset();
       setManagerId("");
       setDepartmentId("");
       await load();
-      setMessage("تم إضافة الموظف");
+      showSuccess("تم إضافة الموظف بنجاح");
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل الإضافة");
     } finally {
@@ -146,13 +185,14 @@ export default function HrEmployeesPage() {
     }
   }
 
-  async function onDelete(u: TeamUser) {
-    if (!window.confirm(`حذف الموظف «${u.name}»؟`)) return;
+  async function onDelete() {
+    if (!pendingDelete) return;
     setBusy(true);
     setError("");
     try {
-      await apiSend(`/api/team/${u._id}`, "DELETE");
-      if (editing?._id === u._id) setEditing(null);
+      await apiSend(`/api/team/${pendingDelete._id}`, "DELETE");
+      if (editing?._id === pendingDelete._id) setEditing(null);
+      setPendingDelete(null);
       await load();
       setMessage("تم حذف الموظف");
     } catch (err) {
@@ -195,13 +235,14 @@ export default function HrEmployeesPage() {
                 <div>
                   <div className="font-semibold">{u.name}</div>
                   <div className="text-sm text-[var(--muted)]">{u.email}</div>
+                  <LoginPasswordLine password={u.loginPassword} />
                   <div className="mt-1 text-sm">
                     {u.managerId?.name || "بدون مدير"} · {u.departmentId?.name || "بدون قسم"}
                   </div>
                 </div>
                 <div className="flex gap-2">
                   <button type="button" className="btn btn-secondary text-sm" onClick={() => openEdit(u)}>تعديل</button>
-                  <button type="button" className="btn btn-danger text-sm" disabled={busy} onClick={() => onDelete(u)}>حذف</button>
+                  <button type="button" className="btn btn-danger text-sm" disabled={busy} onClick={() => setPendingDelete(u)}>حذف</button>
                 </div>
               </article>
             ))
@@ -225,7 +266,12 @@ export default function HrEmployeesPage() {
               <option value="">— اختر —</option>
               {managers.map((m) => (
                 <option key={m._id} value={m._id}>
-                  {m.name}{m.departmentId?.name ? ` (${m.departmentId.name})` : ""}
+                  {m.name}
+                  {m.managedDepartments && m.managedDepartments.length > 0
+                    ? ` (${m.managedDepartments.map((d) => d.name).join("، ")})`
+                    : m.departmentId?.name
+                      ? ` (${m.departmentId.name})`
+                      : ""}
                 </option>
               ))}
             </select>
@@ -234,7 +280,7 @@ export default function HrEmployeesPage() {
             <label>القسم</label>
             <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} required>
               <option value="">— اختر —</option>
-              {departments.map((d) => (
+              {createDeptOptions.map((d) => (
                 <option key={d._id} value={d._id}>{d.name}</option>
               ))}
             </select>
@@ -273,7 +319,7 @@ export default function HrEmployeesPage() {
               <label>القسم</label>
               <select value={editDeptId} onChange={(e) => setEditDeptId(e.target.value)} required>
                 <option value="">— اختر —</option>
-                {departments.map((d) => (
+                {editDeptOptions.map((d) => (
                   <option key={d._id} value={d._id}>{d.name}</option>
                 ))}
               </select>
@@ -286,6 +332,21 @@ export default function HrEmployeesPage() {
           </form>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="تأكيد حذف الموظف"
+        message={
+          pendingDelete
+            ? deleteUserConfirmMessage("الموظف", pendingDelete.name)
+            : ""
+        }
+        busy={busy}
+        onCancel={() => {
+          if (!busy) setPendingDelete(null);
+        }}
+        onConfirm={onDelete}
+      />
     </div>
   );
 }

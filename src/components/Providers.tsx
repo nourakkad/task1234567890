@@ -1,11 +1,16 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
+import { SuccessToastProvider } from "@/components/SuccessToast";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider refetchOnWindowFocus={false} refetchInterval={0}>
-      {children}
+    <SessionProvider
+      // iOS Safari / PWA: re-check session when returning to the app
+      refetchOnWindowFocus={true}
+      refetchInterval={5 * 60}
+    >
+      <SuccessToastProvider>{children}</SuccessToastProvider>
     </SessionProvider>
   );
 }

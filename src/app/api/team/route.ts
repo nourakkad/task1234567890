@@ -9,6 +9,11 @@ import {
   canViewOrgDirectory,
 } from "@/lib/permissions";
 import {
+  getManagedDepartments,
+  parseDepartmentIds,
+  syncManagerDepartments,
+} from "@/lib/departments";
+import {
   buildTeamPerformance,
   currentMonthRange,
 } from "@/lib/performance";
@@ -71,8 +76,33 @@ export async function GET() {
         .sort({ name: 1 })
         .lean();
       const { users, performanceMonth } = await withMonthlyRatings(rawUsers);
+
+      // Attach all departments each manager is responsible for
+      const managerIds = users
+        .filter((u) => u.role === "manager")
+        .map((u) => u._id);
+      const managedBy = new Map<string, Array<{ _id: string; name: string }>>();
+      if (managerIds.length > 0) {
+        const depts = await Department.find({
+          managerId: { $in: managerIds },
+        })
+          .select("_id name managerId")
+          .lean();
+        for (const d of depts) {
+          const mid = String(d.managerId);
+          const list = managedBy.get(mid) || [];
+          list.push({ _id: String(d._id), name: d.name });
+          managedBy.set(mid, list);
+        }
+      }
+      const usersWithDepts = users.map((u) => {
+        if (u.role !== "manager") return u;
+        const managedDepartments = managedBy.get(String(u._id)) || [];
+        return { ...u, managedDepartments };
+      });
+
       return jsonOk({
-        users,
+        users: usersWithDepts,
         departments,
         performanceMonth,
         canEdit: user.role === "hr",
@@ -80,22 +110,21 @@ export async function GET() {
       });
     }
 
-    // Manager: own employees only
+    // Manager: own employees + all departments they manage
     const rawUsers = await User.find({
       active: true,
       role: "employee",
       managerId: user.id,
     })
-      .select("-passwordHash")
+      .select("-passwordHash -loginPassword")
       .populate("departmentId", "_id name")
       .populate("managerId", "_id name email")
       .sort({ name: 1 })
       .lean();
-    const departments = user.departmentId
-      ? await Department.find({ _id: user.departmentId })
-          .populate("managerId", "name")
-          .lean()
-      : [];
+    const departments = await Department.find({ managerId: user.id })
+      .populate("managerId", "name")
+      .sort({ name: 1 })
+      .lean();
     const { users, performanceMonth } = await withMonthlyRatings(rawUsers);
     return jsonOk({
       users,
@@ -140,6 +169,7 @@ export async function POST(request: Request) {
         name: String(body.name).trim(),
         email,
         passwordHash,
+        loginPassword: String(body.password),
         role: "hr",
         departmentId: null,
         managerId: null,
@@ -159,9 +189,12 @@ export async function POST(request: Request) {
 
     let departmentId: Types.ObjectId | null = null;
     let managerId: Types.ObjectId | null = null;
+    let managerDeptIds: string[] = [];
 
     if (createRole === "manager") {
       const newDepartmentName = String(body.newDepartmentName || "").trim();
+      managerDeptIds = parseDepartmentIds(body);
+
       if (newDepartmentName) {
         if (newDepartmentName.length < 2) {
           return jsonError("اسم القسم قصير جدًا");
@@ -176,17 +209,13 @@ export async function POST(request: Request) {
           name: newDepartmentName,
           managerId: null,
         });
-        departmentId = createdDept._id;
-      } else if (body.departmentId) {
-        if (!Types.ObjectId.isValid(String(body.departmentId))) {
-          return jsonError("معرّف القسم غير صالح");
-        }
-        const dept = await Department.findById(body.departmentId);
-        if (!dept) return jsonError("القسم غير موجود");
-        departmentId = dept._id;
-      } else {
-        return jsonError("اختر قسمًا موجودًا أو أنشئ قسمًا جديدًا");
+        managerDeptIds = [...new Set([...managerDeptIds, String(createdDept._id)])];
       }
+
+      if (managerDeptIds.length === 0) {
+        return jsonError("اختر قسمًا واحدًا على الأقل أو أنشئ قسمًا جديدًا");
+      }
+      departmentId = new Types.ObjectId(managerDeptIds[0]);
     } else {
       // employee
       if (!body.managerId || !Types.ObjectId.isValid(String(body.managerId))) {
@@ -199,17 +228,28 @@ export async function POST(request: Request) {
       });
       if (!manager) return jsonError("المدير غير موجود", 404);
       managerId = manager._id;
-      departmentId = manager.departmentId || null;
+
+      const managed = await getManagedDepartments(manager._id);
+      const managedIds = managed.map((d) => d._id);
+
       if (body.departmentId) {
         if (!Types.ObjectId.isValid(String(body.departmentId))) {
           return jsonError("معرّف القسم غير صالح");
         }
-        const dept = await Department.findById(body.departmentId);
+        const deptId = String(body.departmentId);
+        if (managedIds.length > 0 && !managedIds.includes(deptId)) {
+          return jsonError("القسم ليس من أقسام هذا المدير", 403);
+        }
+        const dept = await Department.findById(deptId);
         if (!dept) return jsonError("القسم غير موجود");
         departmentId = dept._id;
+      } else if (managedIds.length === 1) {
+        departmentId = new Types.ObjectId(managedIds[0]);
+      } else if (manager.departmentId) {
+        departmentId = manager.departmentId;
       }
       if (!departmentId) {
-        return jsonError("يجب ربط الموظف بقسم");
+        return jsonError("اختر قسمًا من أقسام المدير");
       }
     }
 
@@ -221,21 +261,30 @@ export async function POST(request: Request) {
       name: String(body.name).trim(),
       email,
       passwordHash,
+      loginPassword: String(body.password),
       role: createRole,
       departmentId,
       managerId,
     });
 
-    if (createRole === "manager" && departmentId) {
-      await Department.findByIdAndUpdate(departmentId, {
-        managerId: created._id,
-      });
+    if (createRole === "manager") {
+      try {
+        await syncManagerDepartments(created._id, managerDeptIds);
+      } catch {
+        return jsonError("قسم غير موجود", 404);
+      }
     }
 
     const safe = await User.findById(created._id)
       .select("-passwordHash")
       .populate("departmentId", "name")
-      .populate("managerId", "name email");
+      .populate("managerId", "name email")
+      .lean();
+
+    if (createRole === "manager" && safe) {
+      const managedDepartments = await getManagedDepartments(created._id);
+      return jsonOk({ ...safe, managedDepartments }, 201);
+    }
 
     return jsonOk(safe, 201);
   } catch (error) {

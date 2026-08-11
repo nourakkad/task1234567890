@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { TaskCard, type TaskCardData } from "@/components/tasks/TaskCard";
 import { TaskFilters } from "@/components/tasks/TaskFilters";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { useLiveNotifications } from "@/hooks/useLiveNotifications";
 import { apiGet } from "@/lib/client";
 import {
   EMPTY_TASK_FILTERS,
@@ -47,7 +48,12 @@ export default function CeoTasksPage() {
     load(false);
   }, [authStatus, ready, load]);
 
-  useAutoRefresh(() => load(true), { enabled: ready });
+  useAutoRefresh(() => load(true), {
+    enabled: ready,
+    minMs: 45_000,
+    maxMs: 75_000,
+  });
+  useLiveNotifications(() => load(true), ready);
 
   const filtered = useMemo(
     () => filterTasks(tasks, filters),

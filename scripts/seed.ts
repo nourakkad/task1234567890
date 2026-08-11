@@ -43,6 +43,7 @@ async function seed() {
     name: "المدير العام",
     email: "gm@alhadara.com",
     passwordHash,
+    loginPassword: SEED_PASSWORD,
     role: "general_manager",
   });
 
@@ -50,6 +51,7 @@ async function seed() {
     name: "المدير التنفيذي",
     email: "ceo@alhadara.com",
     passwordHash,
+    loginPassword: SEED_PASSWORD,
     role: "ceo",
   });
 
@@ -57,6 +59,7 @@ async function seed() {
     name: "الموارد البشرية",
     email: "hr@alhadara.com",
     passwordHash,
+    loginPassword: SEED_PASSWORD,
     role: "hr",
   });
 
@@ -76,6 +79,7 @@ async function seed() {
       name: managerInfos[i].name,
       email: managerInfos[i].email,
       passwordHash,
+      loginPassword: SEED_PASSWORD,
       role: "manager",
     });
     managers.push(manager);
@@ -94,6 +98,7 @@ async function seed() {
     name: "Iris",
     email: "iris@alhadara.com",
     passwordHash,
+    loginPassword: SEED_PASSWORD,
     role: "employee",
     departmentId: departments[0]._id,
     managerId: managers[0]._id,
@@ -112,6 +117,7 @@ async function seed() {
       name: emp.name,
       email: emp.email,
       passwordHash,
+      loginPassword: SEED_PASSWORD,
       role: "employee",
       departmentId: departments[emp.dept]._id,
       managerId: managers[emp.dept]._id,

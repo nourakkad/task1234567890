@@ -4,6 +4,10 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
+import {
+  ConfirmDialog,
+  deleteTaskConfirmMessage,
+} from "@/components/ConfirmDialog";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import {
   DOCUMENT_TYPES,
@@ -89,11 +93,13 @@ export default function TaskDetailPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const role = session?.user?.role;
   const canApprove =
     role === "general_manager" || role === "ceo" || role === "manager";
-  const canDelete = role === "ceo";
+  const canDelete =
+    role === "ceo" || role === "general_manager" || role === "manager";
 
   const load = useCallback(async () => {
     const id = params.id;
@@ -142,7 +148,8 @@ export default function TaskDetailPage() {
   async function addUpdate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!task) return;
-    const form = new FormData(e.currentTarget);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     try {
       await apiSend("/api/updates", "POST", {
         taskId: task._id,
@@ -160,7 +167,7 @@ export default function TaskDetailPage() {
             ? Number(form.get("progress")) / 100
             : undefined,
       });
-      e.currentTarget.reset();
+      formEl.reset();
       await load();
       setMessage("تم إضافة التحديث");
     } catch (err) {
@@ -171,7 +178,8 @@ export default function TaskDetailPage() {
   async function addSupplier(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!task) return;
-    const form = new FormData(e.currentTarget);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     try {
       await apiSend("/api/suppliers", "POST", {
         taskId: task._id,
@@ -183,7 +191,7 @@ export default function TaskDetailPage() {
         decision: form.get("decision"),
         reason: form.get("reason"),
       });
-      e.currentTarget.reset();
+      formEl.reset();
       await load();
       setMessage("تم إضافة المورد");
     } catch (err) {
@@ -194,7 +202,8 @@ export default function TaskDetailPage() {
   async function addDoc(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!task) return;
-    const form = new FormData(e.currentTarget);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     try {
       await apiSend("/api/documents", "POST", {
         taskId: task._id,
@@ -208,7 +217,7 @@ export default function TaskDetailPage() {
         actualDate: form.get("actualDate") || null,
         fileLink: form.get("fileLink"),
       });
-      e.currentTarget.reset();
+      formEl.reset();
       await load();
       setMessage("تم إضافة السجل");
     } catch (err) {
@@ -235,21 +244,18 @@ export default function TaskDetailPage() {
   }
 
   async function onDeleteTask() {
-    if (!task || !canDelete) return;
-    const ok = window.confirm(
-      `هل تريد حذف المهمة «${task.taskNo} — ${task.name}»؟\nسيتم حذف التحديثات والموردين والمستندات المرتبطة بها نهائيًا.`
-    );
-    if (!ok) return;
+    if (!task || !canDelete || deleting) return;
 
     setDeleting(true);
     setError("");
     setMessage("");
     try {
       await apiSend(`/api/tasks/${task._id}`, "DELETE");
-      router.replace("/track");
+      router.replace(role === "manager" ? "/team-tasks" : "/track");
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل حذف المهمة");
       setDeleting(false);
+      setConfirmDelete(false);
     }
   }
 
@@ -283,13 +289,24 @@ export default function TaskDetailPage() {
                 type="button"
                 className="btn btn-danger"
                 disabled={deleting}
-                onClick={onDeleteTask}
+                onClick={() => setConfirmDelete(true)}
               >
-                {deleting ? "جارٍ الحذف..." : "حذف المهمة"}
+                حذف المهمة
               </button>
             ) : null}
           </div>
         }
+      />
+
+      <ConfirmDialog
+        open={confirmDelete && canDelete}
+        title="تأكيد حذف المهمة"
+        message={deleteTaskConfirmMessage(task.taskNo, task.name)}
+        busy={deleting}
+        onCancel={() => {
+          if (!deleting) setConfirmDelete(false);
+        }}
+        onConfirm={onDeleteTask}
       />
 
       {error ? <p className="mb-3 text-[var(--danger)]">{error}</p> : null}

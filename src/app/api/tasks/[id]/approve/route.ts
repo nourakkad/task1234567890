@@ -12,6 +12,7 @@ import {
 } from "@/lib/performance";
 import { requireSessionUser } from "@/lib/session";
 import { addTimelineEntry } from "@/lib/timeline";
+import { notifyDecisionMade } from "@/lib/notifications";
 import { Task } from "@/models/Task";
 import { User } from "@/models/User";
 
@@ -181,6 +182,22 @@ export async function POST(request: Request, { params }: Params) {
 
     task.lastUpdate = new Date();
     await task.save();
+
+    try {
+      const owner = await User.findById(task.ownerId).select("role");
+      await notifyDecisionMade({
+        ownerId: task.ownerId,
+        ownerRole: owner?.role,
+        actorId: user.id,
+        actorName: user.name,
+        taskId: task._id,
+        taskNo: task.taskNo,
+        taskName: task.name,
+        decisionLabel,
+      });
+    } catch {
+      // ignore
+    }
 
     const populated = await Task.findById(task._id)
       .populate("ownerId", "name email role")

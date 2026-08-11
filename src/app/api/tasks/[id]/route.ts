@@ -4,13 +4,16 @@ import { jsonError, jsonOk, handleApiError } from "@/lib/api";
 import {
   canAccessTask,
   canDeleteTask,
+  canDeleteThisTask,
   canEditTask,
   canSetManagementDecision,
   getTeamMemberIds,
+  resolveManagerDepartmentIds,
 } from "@/lib/permissions";
 import { sanitizeHttpUrl } from "@/lib/safeUrl";
 import { requireSessionUser } from "@/lib/session";
 import { clampProgress, validateStatusChange } from "@/lib/taskStatus";
+import { notifyAwaitingDecision } from "@/lib/notifications";
 import { DailyUpdate } from "@/models/DailyUpdate";
 import { SampleDocument } from "@/models/SampleDocument";
 import { Supplier } from "@/models/Supplier";
@@ -135,10 +138,12 @@ export async function PATCH(request: Request, { params }: Params) {
         return jsonError("غير مصرح بتغيير القسم", 403);
       }
       if (user.role === "manager") {
+        const managedIds = await resolveManagerDepartmentIds(user);
         if (
-          String(body.departmentId) !== String(user.departmentId || "")
+          managedIds.length > 0 &&
+          !managedIds.includes(String(body.departmentId))
         ) {
-          return jsonError("لا يمكن نقل المهمة خارج قسمك", 403);
+          return jsonError("لا يمكن نقل المهمة خارج أقسامك", 403);
         }
       }
       if (body.departmentId) {
@@ -183,7 +188,33 @@ export async function PATCH(request: Request, { params }: Params) {
         task.managerApproval
       );
       if (statusError) return jsonError(statusError, 400);
+      const prevStatus = task.status;
       task.status = body.status;
+      if (
+        body.status === "بانتظار قرار الإدارة" &&
+        prevStatus !== "بانتظار قرار الإدارة"
+      ) {
+        try {
+          let assignerRole: string | undefined;
+          if (task.assignedById) {
+            const assigner = await User.findById(task.assignedById)
+              .select("role")
+              .lean();
+            assignerRole = assigner?.role;
+          }
+          await notifyAwaitingDecision({
+            assignedById: task.assignedById,
+            assignerRole,
+            actorId: user.id,
+            actorName: user.name,
+            taskId: task._id,
+            taskNo: task.taskNo,
+            taskName: task.name,
+          });
+        } catch {
+          // ignore
+        }
+      }
     }
 
     if (body.assignedDate) task.assignedDate = new Date(body.assignedDate);
@@ -250,7 +281,7 @@ export async function DELETE(_request: Request, { params }: Params) {
   try {
     const user = await requireSessionUser();
     if (!canDeleteTask(user.role)) {
-      return jsonError("فقط المدير التنفيذي يمكنه حذف المهام", 403);
+      return jsonError("غير مصرح بحذف المهام", 403);
     }
 
     await connectDB();
@@ -259,6 +290,16 @@ export async function DELETE(_request: Request, { params }: Params) {
 
     const task = await Task.findById(id);
     if (!task) return jsonError("المهمة غير موجودة", 404);
+
+    const teamIds =
+      user.role === "manager" ? await getTeamMemberIds(user.id) : [];
+    const managedDeptIds =
+      user.role === "manager"
+        ? await resolveManagerDepartmentIds(user)
+        : undefined;
+    if (!canDeleteThisTask(user, task, teamIds, managedDeptIds)) {
+      return jsonError("غير مصرح بحذف هذه المهمة", 403);
+    }
 
     await Promise.all([
       DailyUpdate.deleteMany({ taskId: task._id }),

@@ -5,3 +5,4 @@ export { Task } from "./Task";
 export { DailyUpdate } from "./DailyUpdate";
 export { Supplier } from "./Supplier";
 export { SampleDocument } from "./SampleDocument";
+export { Notification } from "./Notification";

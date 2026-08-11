@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import { getManagedDepartmentIds } from "@/lib/departments";
 import { getAuthSecret } from "@/lib/env";
 import { connectDB } from "@/lib/db";
 import {
@@ -13,6 +14,18 @@ import type { UserRole } from "@/constants/lookups";
 
 const SESSION_MAX_AGE_SEC = 8 * 60 * 60; // 8 hours
 const TOKEN_REFRESH_MS = 15 * 60 * 1000; // re-check DB at most every 15 min
+
+async function departmentIdsForUser(
+  role: string,
+  userId: string,
+  fallbackDeptId: string | null
+): Promise<string[]> {
+  if (role === "manager") {
+    const ids = await getManagedDepartmentIds(userId);
+    if (ids.length > 0) return ids;
+  }
+  return fallbackDeptId ? [fallbackDeptId] : [];
+}
 
 export const authOptions: NextAuthOptions = {
   secret: getAuthSecret(),
@@ -66,12 +79,20 @@ export const authOptions: NextAuthOptions = {
 
         await clearFailedLogins(user);
 
+        const departmentId = user.departmentId?.toString() ?? null;
+        const departmentIds = await departmentIdsForUser(
+          user.role,
+          user._id.toString(),
+          departmentId
+        );
+
         return {
           id: user._id.toString(),
           name: user.name,
           email: user.email,
           role: user.role as UserRole,
-          departmentId: user.departmentId?.toString() ?? null,
+          departmentId,
+          departmentIds,
           managerId: user.managerId?.toString() ?? null,
         };
       },
@@ -83,6 +104,7 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.role = user.role;
         token.departmentId = user.departmentId ?? null;
+        token.departmentIds = user.departmentIds ?? [];
         token.managerId = user.managerId ?? null;
         token.email = user.email;
         token.lastChecked = Date.now();
@@ -106,12 +128,18 @@ export const authOptions: NextAuthOptions = {
             delete token.email;
             delete token.role;
             delete token.departmentId;
+            delete token.departmentIds;
             delete token.managerId;
             return token;
           }
           token.id = dbUser._id.toString();
           token.role = dbUser.role as UserRole;
           token.departmentId = dbUser.departmentId?.toString() ?? null;
+          token.departmentIds = await departmentIdsForUser(
+            dbUser.role,
+            dbUser._id.toString(),
+            token.departmentId ?? null
+          );
           token.managerId = dbUser.managerId?.toString() ?? null;
           token.name = dbUser.name;
           token.lastChecked = Date.now();
@@ -131,6 +159,11 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role as UserRole;
         session.user.departmentId =
           (token.departmentId as string | null) ?? null;
+        session.user.departmentIds = Array.isArray(token.departmentIds)
+          ? (token.departmentIds as string[])
+          : session.user.departmentId
+            ? [session.user.departmentId]
+            : [];
         session.user.managerId = (token.managerId as string | null) ?? null;
         if (token.name) session.user.name = token.name as string;
       }

@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { useLiveNotifications } from "@/hooks/useLiveNotifications";
 import { apiGet } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
 
@@ -117,7 +118,14 @@ export default function DashboardPage() {
       (role === "general_manager" ||
         role === "ceo" ||
         role === "manager"),
+    minMs: 45_000,
+    maxMs: 75_000,
   });
+  useLiveNotifications(
+    () => load().catch(() => undefined),
+    authStatus === "authenticated" &&
+      (role === "general_manager" || role === "ceo" || role === "manager")
+  );
 
   async function openHistory(row: TeamPerformanceRow) {
     setHistoryOpen(true);

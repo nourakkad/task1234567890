@@ -10,8 +10,13 @@ import {
 import { sanitizeHttpUrl } from "@/lib/safeUrl";
 import { requireSessionUser } from "@/lib/session";
 import { clampProgress, validateStatusChange } from "@/lib/taskStatus";
+import {
+  notifyAwaitingDecision,
+  notifyTaskUpdate,
+} from "@/lib/notifications";
 import { DailyUpdate } from "@/models/DailyUpdate";
 import { Task } from "@/models/Task";
+import { User } from "@/models/User";
 
 export async function GET(request: Request) {
   try {
@@ -120,6 +125,7 @@ export async function POST(request: Request) {
       createdBy: user.id,
     });
 
+    const prevStatus = task.status;
     task.lastUpdate = new Date();
     if (body.nextAction) task.nextAction = String(body.nextAction).slice(0, 2000);
     if (body.expectedDate) task.nextActionDate = new Date(body.expectedDate);
@@ -129,6 +135,45 @@ export async function POST(request: Request) {
       if (progress !== null) task.progress = progress;
     }
     await task.save();
+
+    try {
+      let assignerRole: string | undefined;
+      if (task.assignedById) {
+        const assigner = await User.findById(task.assignedById)
+          .select("role")
+          .lean();
+        assignerRole = assigner?.role;
+      }
+
+      const becameAwaiting =
+        body.status === "بانتظار قرار الإدارة" &&
+        prevStatus !== "بانتظار قرار الإدارة";
+
+      if (becameAwaiting) {
+        await notifyAwaitingDecision({
+          assignedById: task.assignedById,
+          assignerRole,
+          actorId: user.id,
+          actorName: user.name,
+          taskId: task._id,
+          taskNo: task.taskNo,
+          taskName: task.name,
+        });
+      } else {
+        await notifyTaskUpdate({
+          assignedById: task.assignedById,
+          assignerRole,
+          actorId: user.id,
+          actorName: user.name,
+          taskId: task._id,
+          taskNo: task.taskNo,
+          taskName: task.name,
+          snippet: String(body.workPerformed || "").slice(0, 120),
+        });
+      }
+    } catch {
+      // ignore notification errors
+    }
 
     const populated = await DailyUpdate.findById(update._id)
       .populate("taskId", "taskNo name")

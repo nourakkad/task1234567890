@@ -6,6 +6,8 @@ export interface IUser {
   name: string;
   email: string;
   passwordHash: string;
+  /** Plain login password for HR/CEO display only (set when they create/reset it). */
+  loginPassword?: string | null;
   role: UserRole;
   departmentId?: Types.ObjectId | null;
   managerId?: Types.ObjectId | null;
@@ -21,6 +23,7 @@ const UserSchema = new Schema<IUser>(
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true },
     passwordHash: { type: String, required: true },
+    loginPassword: { type: String, default: null },
     role: {
       type: String,
       enum: ["general_manager", "ceo", "hr", "manager", "employee"],

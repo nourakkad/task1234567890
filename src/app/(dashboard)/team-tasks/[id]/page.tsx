@@ -2,9 +2,13 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
+import {
+  ConfirmDialog,
+  deleteTaskConfirmMessage,
+} from "@/components/ConfirmDialog";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import { StarRating } from "@/components/tasks/StarRating";
 import { TimelineList } from "@/components/tasks/TimelineList";
@@ -50,6 +54,7 @@ type Decision = "approved" | "rejected" | "ended" | "note";
 
 export default function TeamTaskDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const { data: session, status: authStatus } = useSession();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [updates, setUpdates] = useState<UpdateRow[]>([]);
@@ -58,6 +63,8 @@ export default function TeamTaskDetailPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
     const [t, u] = await Promise.all([
@@ -135,6 +142,22 @@ export default function TeamTaskDetailPage() {
     submitDecision("note");
   }
 
+  async function onDeleteTask() {
+    if (!task || deleting) return;
+
+    setDeleting(true);
+    setError("");
+    setMessage("");
+    try {
+      await apiSend(`/api/tasks/${task._id}`, "DELETE");
+      router.replace("/team-tasks");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل حذف المهمة");
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
+
   if (!task) {
     return (
       <p className={error ? "text-[var(--danger)]" : "text-[var(--muted)]"}>
@@ -149,10 +172,31 @@ export default function TeamTaskDetailPage() {
         title={`${task.taskNo} — ${task.name}`}
         subtitle={`متابعة مهمة الموظف: ${task.ownerId?.name || "—"}`}
         actions={
-          <Link href="/team-tasks" className="btn btn-secondary">
-            العودة لمتابعة الفريق
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled={busy || deleting}
+              onClick={() => setConfirmDelete(true)}
+            >
+              حذف المهمة
+            </button>
+            <Link href="/team-tasks" className="btn btn-secondary">
+              العودة لمتابعة الفريق
+            </Link>
+          </div>
         }
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="تأكيد حذف المهمة"
+        message={deleteTaskConfirmMessage(task.taskNo, task.name)}
+        busy={deleting}
+        onCancel={() => {
+          if (!deleting) setConfirmDelete(false);
+        }}
+        onConfirm={onDeleteTask}
       />
 
       <div className="mx-auto grid max-w-3xl gap-4">

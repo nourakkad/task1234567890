@@ -12,6 +12,10 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
+import {
+  ConfirmDialog,
+  deleteTaskConfirmMessage,
+} from "@/components/ConfirmDialog";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import { StarRating } from "@/components/tasks/StarRating";
 import { TimelineList } from "@/components/tasks/TimelineList";
@@ -78,7 +82,7 @@ function TrackDetailInner() {
   const { data: session } = useSession();
   const role = session?.user?.role;
   const isLeadership = role === "general_manager" || role === "ceo";
-  const canDelete = role === "ceo";
+  const canDelete = role === "ceo" || role === "general_manager";
   const backHref =
     searchParams.get("back") ||
     (isLeadership ? "/track" : "/manager-tasks");
@@ -89,6 +93,7 @@ function TrackDetailInner() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
     const [t, u] = await Promise.all([
@@ -172,11 +177,7 @@ function TrackDetailInner() {
   }
 
   async function onDeleteTask() {
-    if (!task || !canDelete) return;
-    const ok = window.confirm(
-      `هل تريد حذف المهمة «${task.taskNo} — ${task.name}»؟\nسيتم حذف التحديثات والموردين والمستندات المرتبطة بها نهائيًا.`
-    );
-    if (!ok) return;
+    if (!task || !canDelete || busy) return;
 
     setBusy(true);
     setError("");
@@ -187,6 +188,7 @@ function TrackDetailInner() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل حذف المهمة");
       setBusy(false);
+      setConfirmDelete(false);
     }
   }
 
@@ -214,7 +216,7 @@ function TrackDetailInner() {
                 type="button"
                 className="btn btn-danger"
                 disabled={busy}
-                onClick={onDeleteTask}
+                onClick={() => setConfirmDelete(true)}
               >
                 حذف المهمة
               </button>
@@ -224,6 +226,17 @@ function TrackDetailInner() {
             </Link>
           </div>
         }
+      />
+
+      <ConfirmDialog
+        open={confirmDelete && canDelete}
+        title="تأكيد حذف المهمة"
+        message={deleteTaskConfirmMessage(task.taskNo, task.name)}
+        busy={busy}
+        onCancel={() => {
+          if (!busy) setConfirmDelete(false);
+        }}
+        onConfirm={onDeleteTask}
       />
 
       <div className="mx-auto grid max-w-3xl gap-4">

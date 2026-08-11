@@ -5,9 +5,12 @@ import { jsonError, jsonOk, handleApiError } from "@/lib/api";
 import {
   canCreateTask,
   getVisibleTaskFilter,
+  resolveManagerDepartmentIds,
 } from "@/lib/permissions";
+import { getManagedDepartmentIds } from "@/lib/departments";
 import { requireSessionUser } from "@/lib/session";
 import { addTimelineEntry } from "@/lib/timeline";
+import { notifyTaskAssigned } from "@/lib/notifications";
 import { DailyUpdate } from "@/models/DailyUpdate";
 import { Task } from "@/models/Task";
 import { User } from "@/models/User";
@@ -43,12 +46,15 @@ export async function GET(request: Request) {
 
       const ownerOid = new Types.ObjectId(user.id);
       const or: Record<string, unknown>[] = [{ ownerId: ownerOid }];
-      if (
-        user.role === "manager" &&
-        user.departmentId &&
-        Types.ObjectId.isValid(user.departmentId)
-      ) {
-        or.push({ departmentId: new Types.ObjectId(user.departmentId) });
+      if (user.role === "manager") {
+        const deptIds = await resolveManagerDepartmentIds(user);
+        if (deptIds.length > 0) {
+          or.push({
+            departmentId: {
+              $in: deptIds.map((id) => new Types.ObjectId(id)),
+            },
+          });
+        }
       }
       filter = { $or: or };
     }
@@ -233,11 +239,19 @@ export async function POST(request: Request) {
         if (!body.departmentId) {
           return jsonError("يجب اختيار قسم للمدير");
         }
+        const managed = await getManagedDepartmentIds(owner._id);
+        const legacy = owner.departmentId?.toString();
+        const allowed =
+          managed.length > 0
+            ? managed
+            : legacy
+              ? [legacy]
+              : [];
         if (
-          owner.departmentId &&
-          body.departmentId !== owner.departmentId.toString()
+          allowed.length > 0 &&
+          !allowed.includes(String(body.departmentId))
         ) {
-          return jsonError("يجب أن تطابق المهمة قسم المدير المختار", 403);
+          return jsonError("يجب أن تكون المهمة ضمن أقسام المدير المختار", 403);
         }
       }
       // CEO / HR may have no department — optional
@@ -257,11 +271,19 @@ export async function POST(request: Request) {
         if (!body.departmentId) {
           return jsonError("الاسم والمسؤول والقسم مطلوبة");
         }
+        const managed = await getManagedDepartmentIds(owner._id);
+        const legacy = owner.departmentId?.toString();
+        const allowed =
+          managed.length > 0
+            ? managed
+            : legacy
+              ? [legacy]
+              : [];
         if (
-          owner.departmentId &&
-          body.departmentId !== owner.departmentId.toString()
+          allowed.length > 0 &&
+          !allowed.includes(String(body.departmentId))
         ) {
-          return jsonError("يجب أن تطابق المهمة قسم المدير المختار", 403);
+          return jsonError("يجب أن تكون المهمة ضمن أقسام المدير المختار", 403);
         }
       }
       if (!body.managementDecision && !body.nextAction) {
@@ -276,14 +298,16 @@ export async function POST(request: Request) {
       if (!body.departmentId) {
         return jsonError("الاسم والمسؤول والقسم مطلوبة");
       }
-      const isTeam =
-        owner.managerId?.toString() === user.id ||
-        owner.departmentId?.toString() === user.departmentId;
+      const managedIds = await resolveManagerDepartmentIds(user);
+      const isTeam = owner.managerId?.toString() === user.id;
       if (!isTeam) {
         return jsonError("لا يمكن إسناد المهمة خارج فريقك", 403);
       }
-      if (user.departmentId && body.departmentId !== user.departmentId) {
-        return jsonError("يجب أن تكون المهمة ضمن قسمك", 403);
+      if (
+        managedIds.length > 0 &&
+        !managedIds.includes(String(body.departmentId))
+      ) {
+        return jsonError("يجب أن تكون المهمة ضمن أقسامك", 403);
       }
       if (!body.managementDecision && !body.nextAction) {
         return jsonError("أدخل القرار أو الأمر للموظف");
@@ -362,6 +386,20 @@ export async function POST(request: Request) {
     const populated = await Task.findById(task._id)
       .populate("ownerId", "name email role")
       .populate("departmentId", "name");
+
+    try {
+      await notifyTaskAssigned({
+        ownerId: task.ownerId,
+        ownerRole: owner.role,
+        assignedById: user.id,
+        assignerName: user.name || ROLE_LABELS[user.role as UserRole] || "الإدارة",
+        taskId: task._id,
+        taskNo: task.taskNo,
+        taskName: task.name,
+      });
+    } catch {
+      // don't fail task create if notification fails
+    }
 
     return jsonOk(populated, 201);
   } catch (error) {

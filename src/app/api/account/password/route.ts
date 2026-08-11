@@ -41,6 +41,7 @@ export async function PATCH(request: Request) {
     }
 
     user.passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    user.loginPassword = null;
     await user.save();
 
     return jsonOk({ ok: true, message: "تم تغيير كلمة المرور بنجاح" });

@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { ROLE_LABELS } from "@/constants/lookups";
 import { isNavActive, NAV_LINKS } from "@/components/navLinks";
+import { NotificationBell } from "@/components/NotificationBell";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -77,13 +78,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-        <Link
-          href="/account"
-          className="menu-toggle"
-          aria-label="حسابي"
-        >
-          <UserIcon />
-        </Link>
+        <div className="flex shrink-0 items-center gap-1">
+          <NotificationBell />
+          <Link
+            href="/account"
+            className="menu-toggle"
+            aria-label="حسابي"
+          >
+            <UserIcon />
+          </Link>
+        </div>
       </header>
 
       {/* Overlay */}
@@ -154,14 +158,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="shrink-0 border-t border-white/10 p-4">
-          <div className="text-sm font-semibold">{data?.user?.name}</div>
-          <div className="mt-0.5 text-xs text-[var(--sidebar-muted)]">
-            {role ? ROLE_LABELS[role] : ""}
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold">{data?.user?.name}</div>
+              <div className="mt-0.5 text-xs text-[var(--sidebar-muted)]">
+                {role ? ROLE_LABELS[role] : ""}
+              </div>
+            </div>
+            <NotificationBell variant="dark" />
           </div>
           <Link
             href="/account"
             onClick={() => setOpen(false)}
-            className="btn btn-secondary mt-3 w-full text-sm"
+            className="btn btn-secondary mt-1 w-full text-sm"
           >
             تغيير كلمة المرور
           </Link>

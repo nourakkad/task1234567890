@@ -1,5 +1,8 @@
 import { Types } from "mongoose";
 import type { UserRole } from "@/constants/lookups";
+import {
+  getManagedDepartmentIds,
+} from "@/lib/departments";
 import { User } from "@/models/User";
 import type { ITask } from "@/models/Task";
 
@@ -8,7 +11,10 @@ export interface SessionUser {
   name: string;
   email: string;
   role: UserRole;
+  /** Primary / legacy single department */
   departmentId?: string | null;
+  /** Departments this manager is responsible for */
+  departmentIds?: string[];
   managerId?: string | null;
 }
 
@@ -57,7 +63,29 @@ export function canDeleteUpdate(role: UserRole) {
 }
 
 export function canDeleteTask(role: UserRole) {
-  return role === "ceo";
+  return (
+    role === "ceo" || role === "general_manager" || role === "manager"
+  );
+}
+
+/** Leadership: any task. Manager: only tasks they assigned or owned by their team. */
+export function canDeleteThisTask(
+  user: SessionUser,
+  task: ITask | { ownerId?: unknown; assignedById?: unknown; departmentId?: unknown },
+  teamIds: string[],
+  managedDeptIds?: string[]
+) {
+  if (user.role === "ceo" || user.role === "general_manager") return true;
+  if (user.role !== "manager") return false;
+  if (!canAccessTask(user, task, teamIds, managedDeptIds)) return false;
+
+  const assignedBy = refId(
+    (task as { assignedById?: unknown }).assignedById
+  );
+  if (assignedBy === user.id) return true;
+
+  const ownerId = refId(task.ownerId);
+  return Boolean(ownerId && teamIds.includes(ownerId));
 }
 
 export function canTrackEmployees(role: UserRole) {
@@ -66,6 +94,21 @@ export function canTrackEmployees(role: UserRole) {
 
 export function canTrackManagers(role: UserRole) {
   return role === "general_manager" || role === "ceo";
+}
+
+/** Resolve all department ids a manager may act in. */
+export async function resolveManagerDepartmentIds(
+  user: SessionUser
+): Promise<string[]> {
+  if (user.role !== "manager") {
+    return user.departmentId ? [user.departmentId] : [];
+  }
+  if (user.departmentIds && user.departmentIds.length > 0) {
+    return user.departmentIds;
+  }
+  const fromDb = await getManagedDepartmentIds(user.id);
+  if (fromDb.length > 0) return fromDb;
+  return user.departmentId ? [user.departmentId] : [];
 }
 
 export async function getVisibleTaskFilter(user: SessionUser) {
@@ -86,16 +129,16 @@ export async function getVisibleTaskFilter(user: SessionUser) {
       new Types.ObjectId(user.id),
       ...employees.map((e) => e._id),
     ];
-    const filter: Record<string, unknown> = {
-      $or: [{ ownerId: { $in: ownerIds } }],
-    };
-    if (user.departmentId) {
-      filter.$or = [
-        { ownerId: { $in: ownerIds } },
-        { departmentId: new Types.ObjectId(user.departmentId) },
-      ];
+    const deptIds = await resolveManagerDepartmentIds(user);
+    const or: Record<string, unknown>[] = [{ ownerId: { $in: ownerIds } }];
+    if (deptIds.length > 0) {
+      or.push({
+        departmentId: {
+          $in: deptIds.map((id) => new Types.ObjectId(id)),
+        },
+      });
     }
-    return filter;
+    return { $or: or };
   }
 
   return { ownerId: new Types.ObjectId(user.id) };
@@ -114,7 +157,8 @@ function refId(value: unknown): string {
 export function canAccessTask(
   user: SessionUser,
   task: ITask | { ownerId?: unknown; departmentId?: unknown },
-  teamIds: string[]
+  teamIds: string[],
+  managedDeptIds?: string[]
 ) {
   if (user.role === "general_manager" || user.role === "ceo") return true;
 
@@ -125,15 +169,17 @@ export function canAccessTask(
     return ownerId === user.id;
   }
 
-  // manager: own tasks, department tasks, or team-member tasks
+  // manager: own tasks, managed-department tasks, or team-member tasks
   if (ownerId && ownerId === user.id) return true;
-  if (
-    user.departmentId &&
-    departmentId &&
-    departmentId === user.departmentId
-  ) {
-    return true;
-  }
+  const depts =
+    managedDeptIds && managedDeptIds.length > 0
+      ? managedDeptIds
+      : user.departmentIds && user.departmentIds.length > 0
+        ? user.departmentIds
+        : user.departmentId
+          ? [user.departmentId]
+          : [];
+  if (departmentId && depts.includes(departmentId)) return true;
   return Boolean(ownerId && teamIds.includes(ownerId));
 }
 
@@ -145,10 +191,15 @@ export async function getTeamMemberIds(managerId: string): Promise<string[]> {
   return employees.map((e) => e._id.toString());
 }
 
-export function canEditTask(user: SessionUser, task: ITask, teamIds: string[]) {
+export function canEditTask(
+  user: SessionUser,
+  task: ITask,
+  teamIds: string[],
+  managedDeptIds?: string[]
+) {
   if (user.role === "general_manager" || user.role === "ceo") return true;
   if (user.role === "manager") {
-    return canAccessTask(user, task, teamIds);
+    return canAccessTask(user, task, teamIds, managedDeptIds);
   }
   if (user.role === "hr") {
     return refId(task.ownerId) === user.id;

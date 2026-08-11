@@ -7,6 +7,11 @@ import {
   canManageDirectory,
   canManageHrAccounts,
 } from "@/lib/permissions";
+import {
+  getManagedDepartments,
+  parseDepartmentIds,
+  syncManagerDepartments,
+} from "@/lib/departments";
 import { requireSessionUser } from "@/lib/session";
 import { Department } from "@/models/Department";
 import { Task } from "@/models/Task";
@@ -56,6 +61,7 @@ export async function PATCH(request: Request, { params }: Params) {
           String(body.password),
           BCRYPT_ROUNDS
         );
+        target.loginPassword = String(body.password);
       }
 
       await target.save();
@@ -95,22 +101,22 @@ export async function PATCH(request: Request, { params }: Params) {
         String(body.password),
         BCRYPT_ROUNDS
       );
+      target.loginPassword = String(body.password);
     }
 
-    if (target.role === "manager" && body.departmentId !== undefined) {
-      if (!Types.ObjectId.isValid(String(body.departmentId))) {
-        return jsonError("معرّف القسم غير صالح");
+    if (
+      target.role === "manager" &&
+      (body.departmentIds !== undefined || body.departmentId !== undefined)
+    ) {
+      const ids = parseDepartmentIds(body);
+      if (ids.length === 0) {
+        return jsonError("اختر قسمًا واحدًا على الأقل");
       }
-      const dept = await Department.findById(body.departmentId);
-      if (!dept) return jsonError("القسم غير موجود", 404);
-      const prevDeptId = target.departmentId?.toString() || null;
-      target.departmentId = dept._id;
-      await Department.findByIdAndUpdate(dept._id, { managerId: target._id });
-      if (prevDeptId && prevDeptId !== dept._id.toString()) {
-        await Department.updateOne(
-          { _id: prevDeptId, managerId: target._id },
-          { $set: { managerId: null } }
-        );
+      try {
+        const oids = await syncManagerDepartments(target._id, ids);
+        target.departmentId = oids[0] || null;
+      } catch {
+        return jsonError("قسم غير موجود", 404);
       }
     }
 
@@ -126,8 +132,13 @@ export async function PATCH(request: Request, { params }: Params) {
         });
         if (!manager) return jsonError("المدير غير موجود", 404);
         target.managerId = manager._id;
-        if (!body.departmentId && manager.departmentId) {
-          target.departmentId = manager.departmentId;
+        if (!body.departmentId) {
+          const managed = await getManagedDepartments(manager._id);
+          if (managed.length === 1) {
+            target.departmentId = new Types.ObjectId(managed[0]._id);
+          } else if (manager.departmentId) {
+            target.departmentId = manager.departmentId;
+          }
         }
       }
       if (body.departmentId !== undefined) {
@@ -136,6 +147,16 @@ export async function PATCH(request: Request, { params }: Params) {
         }
         const dept = await Department.findById(body.departmentId);
         if (!dept) return jsonError("القسم غير موجود", 404);
+        if (target.managerId) {
+          const managed = await getManagedDepartments(target.managerId);
+          const managedIds = managed.map((d) => d._id);
+          if (
+            managedIds.length > 0 &&
+            !managedIds.includes(String(body.departmentId))
+          ) {
+            return jsonError("القسم ليس من أقسام مدير هذا الموظف", 403);
+          }
+        }
         target.departmentId = dept._id;
       }
     }
@@ -145,7 +166,13 @@ export async function PATCH(request: Request, { params }: Params) {
     const safe = await User.findById(target._id)
       .select("-passwordHash")
       .populate("departmentId", "name")
-      .populate("managerId", "name email");
+      .populate("managerId", "name email")
+      .lean();
+
+    if (target.role === "manager" && safe) {
+      const managedDepartments = await getManagedDepartments(target._id);
+      return jsonOk({ ...safe, managedDepartments });
+    }
 
     return jsonOk(safe);
   } catch (error) {
