@@ -54,6 +54,7 @@ export function filterTasks<T extends TaskCardData>(
       t.lastMessage?.text,
       t.lastMessage?.senderName,
       (t as { assignedById?: { name?: string } }).assignedById?.name,
+      ...(t.messageTexts || []),
     ]
       .filter(Boolean)
       .join(" ")

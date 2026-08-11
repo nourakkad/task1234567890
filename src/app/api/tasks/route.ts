@@ -140,53 +140,56 @@ export async function GET(request: Request) {
         senderRoleLabel: string;
       }
     >();
+    const textsByTask = new Map<string, string[]>();
 
     if (taskIds.length > 0) {
-      const recent = await DailyUpdate.aggregate([
-        { $match: { taskId: { $in: taskIds } } },
-        { $sort: { createdAt: -1, date: -1 } },
-        {
-          $group: {
-            _id: "$taskId",
-            text: { $first: "$workPerformed" },
-            createdAt: { $first: "$createdAt" },
-            date: { $first: "$date" },
-            entryType: { $first: "$entryType" },
-            createdBy: { $first: "$createdBy" },
-          },
-        },
-        {
-          $lookup: {
-            from: "users",
-            localField: "createdBy",
-            foreignField: "_id",
-            as: "sender",
-          },
-        },
-        {
-          $unwind: {
-            path: "$sender",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-      ]);
+      const allUpdates = await DailyUpdate.find({ taskId: { $in: taskIds } })
+        .select(
+          "taskId workPerformed result issue nextAction managerNotes supplier createdAt date entryType createdBy"
+        )
+        .populate("createdBy", "name role")
+        .sort({ createdAt: -1, date: -1 })
+        .lean();
 
-      for (const entry of recent) {
-        const role = (entry.sender?.role as UserRole) || "employee";
-        latestByTask.set(String(entry._id), {
-          text: entry.text,
-          date: entry.createdAt || entry.date,
-          entryType: entry.entryType,
-          senderName: entry.sender?.name || "—",
-          senderRole: role,
-          senderRoleLabel: ROLE_LABELS[role] || role,
-        });
+      for (const entry of allUpdates) {
+        const tid = String(entry.taskId);
+        const parts = [
+          entry.workPerformed,
+          entry.result,
+          entry.issue,
+          entry.nextAction,
+          entry.managerNotes,
+          entry.supplier,
+        ].filter((x): x is string => Boolean(x && String(x).trim()));
+
+        if (parts.length > 0) {
+          const list = textsByTask.get(tid) || [];
+          list.push(...parts);
+          textsByTask.set(tid, list);
+        }
+
+        if (!latestByTask.has(tid)) {
+          const sender = entry.createdBy as
+            | { name?: string; role?: UserRole }
+            | null
+            | undefined;
+          const role = sender?.role || "employee";
+          latestByTask.set(tid, {
+            text: entry.workPerformed,
+            date: entry.createdAt || entry.date,
+            entryType: entry.entryType,
+            senderName: sender?.name || "—",
+            senderRole: role,
+            senderRoleLabel: ROLE_LABELS[role] || role,
+          });
+        }
       }
     }
 
     const withLastMessage = tasks.map((task) => ({
       ...task,
       lastMessage: latestByTask.get(String(task._id)) || null,
+      messageTexts: textsByTask.get(String(task._id)) || [],
     }));
 
     return jsonOk(withLastMessage);

@@ -102,7 +102,6 @@ function TrackDetailInner() {
     ]);
     setTask(t);
     setUpdates(u);
-    setOrder(t.managementDecision || "");
     if (t.performanceScore != null) setScore(t.performanceScore);
   }, [params.id]);
 
@@ -159,10 +158,22 @@ function TrackDetailInner() {
         }
       );
       setTask(updated);
-      if (decision === "note") setMessage("تم حفظ القرار / الأمر");
-      if (decision === "approved") setMessage("تم قبول المهمة");
-      if (decision === "rejected") setMessage("تم رفض المهمة");
-      if (decision === "ended") setMessage("تم إنهاء المهمة");
+      if (decision === "note") {
+        setOrder("");
+        setMessage("تم حفظ القرار / الأمر");
+      }
+      if (decision === "approved") {
+        setOrder("");
+        setMessage("تم قبول المهمة");
+      }
+      if (decision === "rejected") {
+        setOrder("");
+        setMessage("تم رفض المهمة");
+      }
+      if (decision === "ended") {
+        setOrder("");
+        setMessage("تم إنهاء المهمة");
+      }
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل تنفيذ القرار");

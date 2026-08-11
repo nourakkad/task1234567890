@@ -29,7 +29,7 @@ export function TaskFilters({
   value,
   onChange,
   departments: departmentsProp,
-  searchPlaceholder = "رقم المهمة، الاسم، المسؤول...",
+  searchPlaceholder = "رقم المهمة، الاسم، المسؤول، ملاحظات التحديثات...",
   showPriority = true,
   showDepartment = false,
 }: TaskFiltersProps) {

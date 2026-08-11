@@ -29,6 +29,8 @@ export interface TaskCardData {
   ownerId?: { _id?: string; name?: string; role?: string } | null;
   departmentId?: { _id?: string; name?: string } | null;
   lastMessage?: TaskLastMessage | null;
+  /** All timeline/update note texts for client-side search */
+  messageTexts?: string[];
 }
 
 const APPROVAL_LABEL: Record<string, string> = {

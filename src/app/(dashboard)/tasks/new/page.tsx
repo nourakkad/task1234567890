@@ -6,7 +6,6 @@ import { useSession } from "next-auth/react";
 import { AssigneePicker } from "@/components/AssigneePicker";
 import { PageHeader } from "@/components/PageHeader";
 import { useSuccessToast } from "@/components/SuccessToast";
-import { TASK_PRIORITIES, TASK_STATUSES } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
 
 interface AssignableUser {
@@ -21,6 +20,10 @@ interface AssignableUser {
 interface Department {
   _id: string;
   name: string;
+}
+
+function todayInputDate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function NewTaskPage() {
@@ -41,13 +44,7 @@ export default function NewTaskPage() {
     description: "",
     ownerId: "",
     departmentId: "",
-    priority: "متوسطة",
-    status: "لم تبدأ",
-    assignedDate: new Date().toISOString().slice(0, 10),
-    targetDate: "",
-    nextAction: "",
     managementDecision: "",
-    progress: 0,
   });
 
   const selectedOwner = users.find((u) => u._id === form.ownerId);
@@ -56,7 +53,6 @@ export default function NewTaskPage() {
     selectedOwner.contractType === "external";
   const ownerNeedsNoDept =
     selectedOwner?.role === "ceo" || selectedOwner?.role === "hr";
-  const deptRequired = !ownerNeedsNoDept && !isExternalOwner;
 
   useEffect(() => {
     if (authStatus === "loading") {
@@ -90,8 +86,7 @@ export default function NewTaskPage() {
         setDepartments(Array.isArray(d) ? d : []);
         if (isManager) {
           const ids = session?.user?.departmentIds || [];
-          const primary =
-            ids[0] || session?.user?.departmentId || "";
+          const primary = ids[0] || session?.user?.departmentId || "";
           if (primary) {
             setForm((f) => ({ ...f, departmentId: primary }));
           }
@@ -141,9 +136,19 @@ export default function NewTaskPage() {
               _id: selectedOwner.departmentId._id,
               name: selectedOwner.departmentId.name,
             };
-      return dept ? [dept] : departments;
+      return dept ? [dept] : [];
     }
-    return departments;
+    if (selectedOwner?.departmentId) {
+      const dept =
+        typeof selectedOwner.departmentId === "string"
+          ? departments.find((d) => d._id === selectedOwner.departmentId)
+          : {
+              _id: selectedOwner.departmentId._id,
+              name: selectedOwner.departmentId.name,
+            };
+      return dept ? [dept] : [];
+    }
+    return [];
   }, [
     isManager,
     session?.user?.departmentIds,
@@ -151,12 +156,19 @@ export default function NewTaskPage() {
     selectedOwner,
   ]);
 
+  const showDepartmentPicker =
+    Boolean(selectedOwner) &&
+    !ownerNeedsNoDept &&
+    !isExternalOwner &&
+    availableDepartments.length > 1;
+
   function onOwnerChange(ownerId: string) {
     const owner = users.find((u) => u._id === ownerId);
     let departmentId = "";
     if (owner?.role === "manager") {
       const managed = owner.managedDepartments || [];
       if (managed.length === 1) departmentId = managed[0]._id;
+      else if (managed.length > 1) departmentId = "";
       else if (owner.departmentId) {
         departmentId =
           typeof owner.departmentId === "string"
@@ -169,6 +181,13 @@ export default function NewTaskPage() {
           ? owner.departmentId
           : owner.departmentId._id;
     }
+    if (isManager) {
+      const ids = session?.user?.departmentIds || [];
+      if (ids.length === 1) departmentId = ids[0];
+      else if (ids.length > 1) {
+        departmentId = ids.includes(departmentId) ? departmentId : "";
+      }
+    }
     setForm((f) => ({ ...f, ownerId, departmentId }));
   }
 
@@ -178,16 +197,29 @@ export default function NewTaskPage() {
       setError("اختر المسؤول من القائمة");
       return;
     }
+    const orderText = form.managementDecision.trim();
+    if (!orderText) {
+      setError("أدخل الأمر");
+      return;
+    }
+    if (showDepartmentPicker && !form.departmentId) {
+      setError("اختر القسم");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      const orderText = form.managementDecision.trim();
       const task = await apiSend<{ _id: string }>("/api/tasks", "POST", {
-        ...form,
+        name: form.name.trim(),
+        description: form.description.trim(),
+        ownerId: form.ownerId,
         departmentId: form.departmentId || undefined,
+        priority: "متوسطة",
+        status: "لم تبدأ",
+        assignedDate: todayInputDate(),
         managementDecision: isGm || isCeo ? orderText : "",
-        nextAction: orderText || form.nextAction,
-        progress: Number(form.progress) / 100,
+        nextAction: orderText,
+        progress: 0,
       });
       showSuccess("تم إضافة المهمة بنجاح");
       if (isGm) router.push(`/track/${task._id}`);
@@ -210,7 +242,7 @@ export default function NewTaskPage() {
     ? "المدير العام يسند المهام للمدير التنفيذي والموارد البشرية والمدراء وموظفي العقود الخارجية"
     : isCeo
       ? "المدير التنفيذي يسند المهام للموارد البشرية والمدراء وموظفي العقود الخارجية"
-      : "المدير يسند المهام لموظفي فريقه مع قرار/أمر واضح";
+      : "المدير يسند المهام لموظفي فريقه مع أمر واضح";
 
   const ownerLabel = isGm
     ? "المسؤول (تنفيذي / موارد بشرية / مدير / عقد خارجي)"
@@ -230,21 +262,15 @@ export default function NewTaskPage() {
         className="card grid max-w-3xl gap-4 p-5 md:grid-cols-2"
       >
         <div className="field md:col-span-2">
-          <label>اسم المهمة</label>
+          <label>عنوان المهمة</label>
           <input
             required
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="عنوان مختصر للمهمة"
           />
         </div>
-        <div className="field md:col-span-2">
-          <label>وصف المهمة</label>
-          <textarea
-            rows={3}
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-          />
-        </div>
+
         <div className="field md:col-span-2">
           <label>{ownerLabel}</label>
           <AssigneePicker
@@ -266,80 +292,35 @@ export default function NewTaskPage() {
             </p>
           ) : null}
         </div>
-        <div className="field">
-          <label>
-            {isExternalOwner
-              ? "التصنيف"
-              : `القسم${deptRequired ? "" : " (اختياري للتنفيذي / الموارد البشرية)"}`}
-          </label>
-          {isExternalOwner ? (
-            <div className="rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-2.5 text-sm font-semibold text-[var(--brand)]">
-              عقد خارجي
-            </div>
-          ) : (
+
+        {showDepartmentPicker ? (
+          <div className="field md:col-span-2">
+            <label>القسم</label>
             <select
-              required={deptRequired}
+              required
               value={form.departmentId}
               onChange={(e) =>
                 setForm({ ...form, departmentId: e.target.value })
               }
-              disabled={isManager && availableDepartments.length <= 1}
             >
-              <option value="">
-                {ownerNeedsNoDept ? "بدون قسم / اختياري" : "اختر..."}
-              </option>
+              <option value="">اختر القسم...</option>
               {availableDepartments.map((d) => (
                 <option key={d._id} value={d._id}>
                   {d.name}
                 </option>
               ))}
             </select>
-          )}
-        </div>
-        <div className="field">
-          <label>الأولوية</label>
-          <select
-            value={form.priority}
-            onChange={(e) => setForm({ ...form, priority: e.target.value })}
-          >
-            {TASK_PRIORITIES.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>الحالة</label>
-          <select
-            value={form.status}
-            onChange={(e) => setForm({ ...form, status: e.target.value })}
-          >
-            {TASK_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>تاريخ التكليف</label>
-          <input
-            type="date"
-            value={form.assignedDate}
-            onChange={(e) => setForm({ ...form, assignedDate: e.target.value })}
-          />
-        </div>
-        <div className="field">
-          <label>تاريخ الاستحقاق</label>
-          <input
-            type="date"
-            value={form.targetDate}
-            onChange={(e) => setForm({ ...form, targetDate: e.target.value })}
-          />
-        </div>
+          </div>
+        ) : null}
+
+        {isExternalOwner ? (
+          <div className="md:col-span-2 rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-2.5 text-sm font-semibold text-[var(--brand)]">
+            عقد خارجي
+          </div>
+        ) : null}
+
         <div className="field md:col-span-2">
-          <label>القرار / الأمر</label>
+          <label>الأمر</label>
           <textarea
             rows={4}
             value={form.managementDecision}
@@ -347,13 +328,23 @@ export default function NewTaskPage() {
               setForm({
                 ...form,
                 managementDecision: e.target.value,
-                nextAction: e.target.value,
               })
             }
-            placeholder="اكتب القرار أو الأمر المطلوب تنفيذه..."
+            placeholder="اكتب الأمر المطلوب تنفيذه..."
             required
           />
         </div>
+
+        <div className="field md:col-span-2">
+          <label>الوصف (اختياري)</label>
+          <textarea
+            rows={3}
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            placeholder="تفاصيل إضافية إن وجدت..."
+          />
+        </div>
+
         {error ? (
           <p className="md:col-span-2 text-sm text-[var(--danger)]">{error}</p>
         ) : null}

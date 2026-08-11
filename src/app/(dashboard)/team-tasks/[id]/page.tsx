@@ -72,7 +72,6 @@ export default function TeamTaskDetailPage() {
       apiGet<UpdateRow[]>(`/api/updates?taskId=${params.id}`).catch(() => []),
     ]);
     setTask(t);
-    setOrder(t.nextAction || "");
     if (t.performanceScore != null) setScore(t.performanceScore);
     setUpdates(u);
   }, [params.id]);
@@ -125,10 +124,22 @@ export default function TeamTaskDetailPage() {
           ? { performanceScore: score }
           : {}),
       });
-      if (decision === "note") setMessage("تم حفظ القرار / الأمر");
-      if (decision === "approved") setMessage("تم قبول المهمة");
-      if (decision === "rejected") setMessage("تم رفض المهمة");
-      if (decision === "ended") setMessage("تم إنهاء المهمة");
+      if (decision === "note") {
+        setOrder("");
+        setMessage("تم حفظ القرار / الأمر");
+      }
+      if (decision === "approved") {
+        setOrder("");
+        setMessage("تم قبول المهمة");
+      }
+      if (decision === "rejected") {
+        setOrder("");
+        setMessage("تم رفض المهمة");
+      }
+      if (decision === "ended") {
+        setOrder("");
+        setMessage("تم إنهاء المهمة");
+      }
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل تنفيذ القرار");
