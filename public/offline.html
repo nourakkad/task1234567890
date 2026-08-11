@@ -315,9 +315,6 @@
       </p>
 
       <div class="actions">
-        <a class="btn btn-primary" href="/dashboard" id="backLink" hidden
-          >العودة للنظام</a
-        >
         <button class="btn btn-secondary" type="button" id="retryBtn">
           إعادة المحاولة
         </button>
@@ -1031,9 +1028,8 @@
         function updateOnlineUi() {
           var online = navigator.onLine;
           document.getElementById("statusText").textContent = online
-            ? "الاتصال متاح — يمكنك العودة للنظام أو إعادة المحاولة"
+            ? "الاتصال متاح — يمكنك إعادة المحاولة أو المزامنة"
             : "تصفّح المهام المحفوظة، اقرأ السجل، وأضف تحديثًا أو أمرًا — يُرسل لاحقًا";
-          document.getElementById("backLink").hidden = !online;
           document.getElementById("syncBtn").hidden = !(
             online && pending.length > 0
           );
