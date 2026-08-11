@@ -8,7 +8,9 @@ import { TaskCard, type TaskCardData } from "@/components/tasks/TaskCard";
 import { TaskFilters } from "@/components/tasks/TaskFilters";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useLiveNotifications } from "@/hooks/useLiveNotifications";
+import { ROLE_LABELS } from "@/constants/lookups";
 import { apiGet } from "@/lib/client";
+import { rememberTasks } from "@/lib/offlineCatalog";
 import {
   EMPTY_TASK_FILTERS,
   filterTasks,
@@ -41,6 +43,7 @@ export default function TrackPage() {
               : "";
         const data = await apiGet<TaskCardData[]>(`/api/tasks${qs}`);
         setTasks(data);
+        void rememberTasks(data);
         setError("");
       } catch (e) {
         if (!silent) setError(e instanceof Error ? e.message : "فشل التحميل");
@@ -83,7 +86,7 @@ export default function TrackPage() {
         }
         subtitle={
           role === "general_manager"
-            ? "تتبع مهام المدير التنفيذي والموارد البشرية والمدراء"
+            ? `تتبع مهام ${ROLE_LABELS.ceo} والموارد البشرية والمدراء`
             : "تتبع ومراجعة المهام المسندة للمدراء والموارد البشرية"
         }
         actions={

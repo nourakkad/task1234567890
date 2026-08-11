@@ -19,6 +19,7 @@ import { SampleDocument } from "@/models/SampleDocument";
 import { Supplier } from "@/models/Supplier";
 import { Task } from "@/models/Task";
 import { User } from "@/models/User";
+import { ROLE_LABELS } from "@/constants/lookups";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -110,7 +111,7 @@ export async function PATCH(request: Request, { params }: Params) {
           owner.role !== "manager"
         ) {
           return jsonError(
-            "المدير العام يسند المهام للمدير التنفيذي والموارد البشرية والمدراء فقط",
+            `${ROLE_LABELS.general_manager} يسند المهام لـ${ROLE_LABELS.ceo} والموارد البشرية والمدراء فقط`,
             403
           );
         }
@@ -118,7 +119,7 @@ export async function PATCH(request: Request, { params }: Params) {
       if (user.role === "ceo") {
         if (owner.role !== "manager" && owner.role !== "hr") {
           return jsonError(
-            "المدير التنفيذي يسند المهام للموارد البشرية والمدراء فقط",
+            `${ROLE_LABELS.ceo} يسند المهام للموارد البشرية والمدراء فقط`,
             403
           );
         }

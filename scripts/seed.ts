@@ -40,7 +40,7 @@ async function seed() {
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, 12);
 
   const generalManager = await User.create({
-    name: "المدير العام",
+    name: "أ.نبيل عرمان",
     email: "gm@alhadara.com",
     passwordHash,
     loginPassword: SEED_PASSWORD,
@@ -48,7 +48,7 @@ async function seed() {
   });
 
   const ceo = await User.create({
-    name: "المدير التنفيذي",
+    name: "أ.عامر العمري",
     email: "ceo@alhadara.com",
     passwordHash,
     loginPassword: SEED_PASSWORD,

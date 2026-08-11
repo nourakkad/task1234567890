@@ -8,6 +8,7 @@ import { TaskFilters } from "@/components/tasks/TaskFilters";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useLiveNotifications } from "@/hooks/useLiveNotifications";
 import { apiGet } from "@/lib/client";
+import { rememberTasks } from "@/lib/offlineCatalog";
 import {
   EMPTY_TASK_FILTERS,
   filterTasks,
@@ -34,6 +35,7 @@ export default function MyTasksPage() {
     try {
       const data = await apiGet<MyTask[]>("/api/tasks?fromManager=1");
       setTasks(data);
+      void rememberTasks(data);
       setError("");
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : "فشل التحميل");

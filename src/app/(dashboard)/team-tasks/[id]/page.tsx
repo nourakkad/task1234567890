@@ -13,6 +13,7 @@ import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import { StarRating } from "@/components/tasks/StarRating";
 import { TimelineList } from "@/components/tasks/TimelineList";
 import { useOfflineSync } from "@/components/OfflineSyncProvider";
+import { seedOfflineTask } from "@/lib/seedOfflineTask";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
@@ -76,6 +77,7 @@ export default function TeamTaskDetailPage() {
     setTask(t);
     if (t.performanceScore != null) setScore(t.performanceScore);
     setUpdates(u);
+    seedOfflineTask(t as unknown as Record<string, unknown>, u, "decision");
   }, [params.id]);
 
   useEffect(() => {

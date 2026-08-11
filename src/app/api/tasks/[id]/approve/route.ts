@@ -15,6 +15,7 @@ import { addTimelineEntry } from "@/lib/timeline";
 import { notifyDecisionMade } from "@/lib/notifications";
 import { Task } from "@/models/Task";
 import { User } from "@/models/User";
+import { ROLE_LABELS } from "@/constants/lookups";
 
 type Params = { params: Promise<{ id: string }> };
 type Decision = "approved" | "rejected" | "ended" | "note";
@@ -68,7 +69,7 @@ export async function POST(request: Request, { params }: Params) {
           createdBy: user.id,
           text: note,
           entryType: "gm_order",
-          result: "أمر / قرار من المدير العام",
+          result: `أمر / قرار من ${ROLE_LABELS.general_manager}`,
         });
       } else if (user.role === "ceo") {
         await addTimelineEntry({
@@ -76,7 +77,7 @@ export async function POST(request: Request, { params }: Params) {
           createdBy: user.id,
           text: note,
           entryType: "ceo_order",
-          result: "أمر / قرار من المدير التنفيذي",
+          result: `أمر / قرار من ${ROLE_LABELS.ceo}`,
         });
       } else if (user.role === "manager") {
         await addTimelineEntry({

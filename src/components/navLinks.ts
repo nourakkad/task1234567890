@@ -1,4 +1,5 @@
 import type { UserRole } from "@/constants/lookups";
+import { ROLE_LABELS } from "@/constants/lookups";
 
 /**
  * Sidebar order (filtered per role):
@@ -29,7 +30,7 @@ export const NAV_LINKS: Array<{
   // —— Inbox (tasks assigned to me) ——
   {
     href: "/ceo-tasks",
-    label: "مهام من المدير العام",
+    label: `مهام من ${ROLE_LABELS.general_manager}`,
     roles: ["ceo"],
   },
   {

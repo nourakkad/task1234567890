@@ -23,9 +23,13 @@ import {
   type OfflineActionType,
 } from "@/lib/offlineQueue";
 import {
+  isActiveTaskStatus,
   rememberAssignees,
+  rememberOfflineSession,
+  rememberTaskDetail,
   replaceCachedTasks,
   type CachedAssignee,
+  type OfflineActionMode,
 } from "@/lib/offlineCatalog";
 import { emitNotificationsUpdate } from "@/hooks/useLiveNotifications";
 
@@ -71,7 +75,7 @@ type OfflineSyncContextValue = {
 const OfflineSyncContext = createContext<OfflineSyncContextValue | null>(null);
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
-  const { status: sessionStatus } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const showSuccess = useSuccessToast();
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState<OfflineAction[]>([]);
@@ -85,28 +89,133 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const refreshCatalog = useCallback(async () => {
     if (!isBrowserOnline()) return;
     if (sessionStatus !== "authenticated") return;
+
+    const role = session?.user?.role;
+    await rememberOfflineSession({
+      role,
+      userId: session?.user?.id,
+    });
+
     try {
-      const [tasks, users] = await Promise.all([
-        fetchJsonQuiet<
-          Array<{
-            _id: string;
-            taskNo?: string;
-            name?: string;
-            status?: string;
-            updatedAt?: string;
-            createdAt?: string;
-            assignedDate?: string;
-          }>
-        >("/api/tasks?ownedByMe=1"),
-        fetchJsonQuiet<CachedAssignee[]>("/api/users/assignable"),
-      ]);
-      // Always replace so a previous "all visible tasks" cache is cleared
-      if (Array.isArray(tasks)) await replaceCachedTasks(tasks);
-      if (Array.isArray(users)) await rememberAssignees(users);
+      type TaskRow = {
+        _id: string;
+        taskNo?: string;
+        name?: string;
+        status?: string;
+        updatedAt?: string;
+        createdAt?: string;
+        assignedDate?: string;
+        ownerId?: unknown;
+      };
+
+      type Bucket = { mode: OfflineActionMode; rows: TaskRow[] };
+      const buckets: Bucket[] = [];
+
+      const owned =
+        (await fetchJsonQuiet<TaskRow[]>("/api/tasks?ownedByMe=1")) ||
+        (role === "employee"
+          ? await fetchJsonQuiet<TaskRow[]>("/api/tasks?fromManager=1")
+          : null) ||
+        (role === "manager" || role === "ceo" || role === "hr"
+          ? await fetchJsonQuiet<TaskRow[]>("/api/tasks?fromCeo=1")
+          : null) ||
+        (role === "ceo" || role === "hr"
+          ? await fetchJsonQuiet<TaskRow[]>("/api/tasks?fromLeadership=1")
+          : null);
+
+      if (Array.isArray(owned)) {
+        buckets.push({
+          mode: "update",
+          rows: owned.filter((t) => isActiveTaskStatus(t.status)),
+        });
+      }
+
+      if (role === "manager") {
+        const team = await fetchJsonQuiet<TaskRow[]>(
+          "/api/tasks?teamAssigned=1"
+        );
+        if (Array.isArray(team)) {
+          buckets.push({
+            mode: "decision",
+            rows: team.filter((t) => isActiveTaskStatus(t.status)),
+          });
+        }
+      }
+
+      if (role === "ceo") {
+        const tracked = await fetchJsonQuiet<TaskRow[]>(
+          "/api/tasks?managerTasks=1"
+        );
+        if (Array.isArray(tracked)) {
+          buckets.push({
+            mode: "decision",
+            rows: tracked.filter((t) => isActiveTaskStatus(t.status)),
+          });
+        }
+      }
+
+      if (role === "general_manager") {
+        const tracked = await fetchJsonQuiet<TaskRow[]>(
+          "/api/tasks?leadershipTasks=1"
+        );
+        if (Array.isArray(tracked)) {
+          buckets.push({
+            mode: "decision",
+            rows: tracked.filter((t) => isActiveTaskStatus(t.status)),
+          });
+        }
+      }
+
+      const byId = new Map<string, TaskRow>();
+      for (const b of buckets) {
+        for (const t of b.rows) {
+          if (t?._id) byId.set(String(t._id), t);
+        }
+      }
+      const merged = [...byId.values()];
+      if (merged.length > 0 || buckets.some((b) => Array.isArray(b.rows))) {
+        await replaceCachedTasks(merged);
+      }
+
+      const canAssign =
+        role === "general_manager" || role === "ceo" || role === "manager";
+      if (canAssign) {
+        const users = await fetchJsonQuiet<CachedAssignee[]>(
+          "/api/users/assignable"
+        );
+        if (Array.isArray(users)) await rememberAssignees(users);
+      }
+
+      // Prefetch full detail + history so offline reading works without
+      // opening every task first (cap to keep mobile data light).
+      const PREFETCH_CAP = 25;
+      const seen = new Set<string>();
+      // Prefer decision lists first (orders), then owned updates
+      const ordered = [...buckets].reverse();
+      for (const b of ordered) {
+        for (const stub of b.rows) {
+          const id = String(stub._id || "");
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          if (seen.size > PREFETCH_CAP) break;
+          const [detail, updates] = await Promise.all([
+            fetchJsonQuiet<Record<string, unknown>>(`/api/tasks/${id}`),
+            fetchJsonQuiet<unknown[]>(`/api/updates?taskId=${id}`),
+          ]);
+          if (detail) {
+            await rememberTaskDetail(
+              detail,
+              Array.isArray(updates) ? updates : [],
+              b.mode
+            );
+          }
+        }
+        if (seen.size > PREFETCH_CAP) break;
+      }
     } catch {
       // ignore catalog refresh errors
     }
-  }, [sessionStatus]);
+  }, [sessionStatus, session?.user?.role, session?.user?.id]);
 
   const flushNow = useCallback(async () => {
     if (!isBrowserOnline()) return;

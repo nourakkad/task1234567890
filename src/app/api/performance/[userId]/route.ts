@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db";
 import { jsonError, jsonOk, handleApiError } from "@/lib/api";
 import { buildUserMonthHistory } from "@/lib/performance";
 import { requireSessionUser } from "@/lib/session";
+import { ROLE_LABELS } from "@/constants/lookups";
 import { Task } from "@/models/Task";
 import { User } from "@/models/User";
 
@@ -36,7 +37,7 @@ export async function GET(_request: Request, { params }: Params) {
       }
     } else if (user.role === "ceo") {
       if (target.role !== "manager" && target.role !== "employee") {
-        return jsonError("المدير التنفيذي يعرض سجل المدراء والموظفين فقط", 403);
+        return jsonError(`${ROLE_LABELS.ceo} يعرض سجل المدراء والموظفين فقط`, 403);
       }
     } else if (user.role === "manager") {
       if (target.role !== "employee") {

@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/format";
+import { ROLE_LABELS } from "@/constants/lookups";
 
 export interface TimelineItem {
   _id: string;
@@ -39,21 +40,23 @@ function badgeFor(item: TimelineItem) {
     role === "general_manager" ||
     role === "ceo"
   ) {
+    const isGm =
+      role === "general_manager" || Boolean(type?.startsWith("gm_"));
     return {
       className: "msg-ceo border",
       badge: "badge-amber",
       label:
         type === "gm_decision" || type === "ceo_decision"
-          ? role === "general_manager" || type?.startsWith("gm_")
-            ? "قرار المدير العام"
-            : "قرار تنفيذي"
+          ? isGm
+            ? `قرار ${ROLE_LABELS.general_manager}`
+            : `قرار ${ROLE_LABELS.ceo}`
           : type === "gm_order"
-            ? "أمر / قرار المدير العام"
+            ? `أمر / قرار ${ROLE_LABELS.general_manager}`
             : type === "ceo_order"
-              ? "أمر / قرار تنفيذي"
-              : role === "general_manager"
-                ? "رسالة المدير العام"
-                : "رسالة تنفيذية",
+              ? `أمر / قرار ${ROLE_LABELS.ceo}`
+              : isGm
+                ? `رسالة ${ROLE_LABELS.general_manager}`
+                : `رسالة ${ROLE_LABELS.ceo}`,
     };
   }
 

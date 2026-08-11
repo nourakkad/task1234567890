@@ -5,6 +5,7 @@ import Image from "next/image";
 import { getSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { PasswordField } from "@/components/PasswordField";
+import { ROLE_LABELS } from "@/constants/lookups";
 
 // Demo shortcuts: on in local/dev; off in production unless explicitly enabled
 const DEMO_ENABLED =
@@ -13,9 +14,9 @@ const DEMO_ENABLED =
     process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN !== "false");
 
 const DEMO_ACCOUNTS = [
-  { label: "المدير العام", email: "gm@alhadara.com" },
-  { label: "المدير التنفيذي", email: "ceo@alhadara.com" },
-  { label: "الموارد البشرية", email: "hr@alhadara.com" },
+  { label: ROLE_LABELS.general_manager, email: "gm@alhadara.com" },
+  { label: ROLE_LABELS.ceo, email: "ceo@alhadara.com" },
+  { label: ROLE_LABELS.hr, email: "hr@alhadara.com" },
   { label: "مدير المشتريات", email: "procurement@alhadara.com" },
   { label: "موظف (Iris)", email: "iris@alhadara.com" },
 ];

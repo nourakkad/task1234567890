@@ -7,6 +7,7 @@ import { AssigneePicker } from "@/components/AssigneePicker";
 import { PageHeader } from "@/components/PageHeader";
 import { useOfflineSync } from "@/components/OfflineSyncProvider";
 import { useSuccessToast } from "@/components/SuccessToast";
+import { ROLE_LABELS } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
 
 interface AssignableUser {
@@ -300,9 +301,9 @@ export default function NewTaskPage() {
       : "تكليف موظف بمهمة";
 
   const subtitle = isGm
-    ? "المدير العام يسند المهام للمدير التنفيذي والموارد البشرية والمدراء وموظفي العقود الخارجية"
+    ? `${ROLE_LABELS.general_manager} يسند المهام لـ${ROLE_LABELS.ceo} والموارد البشرية والمدراء وموظفي العقود الخارجية`
     : isCeo
-      ? "المدير التنفيذي يسند المهام للموارد البشرية والمدراء وموظفي العقود الخارجية"
+      ? `${ROLE_LABELS.ceo} يسند المهام للموارد البشرية والمدراء وموظفي العقود الخارجية`
       : "المدير يسند المهام لموظفي فريقه مع أمر واضح";
 
   const ownerLabel = isGm

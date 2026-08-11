@@ -21,8 +21,10 @@ import { StarRating } from "@/components/tasks/StarRating";
 import { TimelineList } from "@/components/tasks/TimelineList";
 import { useOfflineSync } from "@/components/OfflineSyncProvider";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { ROLE_LABELS } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
+import { seedOfflineTask } from "@/lib/seedOfflineTask";
 
 interface TaskDetail {
   _id: string;
@@ -105,6 +107,7 @@ function TrackDetailInner() {
     setTask(t);
     setUpdates(u);
     if (t.performanceScore != null) setScore(t.performanceScore);
+    seedOfflineTask(t as unknown as Record<string, unknown>, u, "decision");
   }, [params.id]);
 
   useEffect(() => {
@@ -343,12 +346,12 @@ function TrackDetailInner() {
             <div>
               <h3 className="text-lg font-semibold">
                 {role === "general_manager"
-                  ? "قرار / أمر المدير العام"
-                  : "قرار / أمر المدير التنفيذي"}
+                  ? `قرار / أمر ${ROLE_LABELS.general_manager}`
+                  : `قرار / أمر ${ROLE_LABELS.ceo}`}
               </h3>
               <p className="mt-1 text-sm text-[var(--muted)]">
                 {role === "general_manager"
-                  ? "اكتب القرار أو الأمر للمدير التنفيذي أو المدير، ثم اقبل أو ارفض أو أنهِ المهمة"
+                  ? `اكتب القرار أو الأمر لـ${ROLE_LABELS.ceo} أو المدير، ثم اقبل أو ارفض أو أنهِ المهمة`
                   : "اكتب القرار أو الأمر للمدير، ثم اقبل أو ارفض أو أنهِ المهمة"}
               </p>
             </div>
@@ -435,7 +438,7 @@ function TrackDetailInner() {
         <article className="card p-6">
           <h3 className="mb-3 text-lg font-semibold">سجل التحديثات</h3>
           <p className="mb-3 text-xs text-[var(--muted)]">
-            الأحدث أولاً — يشمل تحديثات المدير وأوامر/قرارات المدير التنفيذي
+            الأحدث أولاً — يشمل تحديثات المدير وأوامر/قرارات {ROLE_LABELS.ceo}
           </p>
           <TimelineList items={updates} />
         </article>

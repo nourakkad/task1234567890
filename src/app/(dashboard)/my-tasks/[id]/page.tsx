@@ -8,9 +8,11 @@ import { PageHeader } from "@/components/PageHeader";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import { TimelineList } from "@/components/tasks/TimelineList";
 import { useOfflineSync } from "@/components/OfflineSyncProvider";
+import { ROLE_LABELS } from "@/constants/lookups";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
+import { seedOfflineTask } from "@/lib/seedOfflineTask";
 
 interface TaskDetail {
   _id: string;
@@ -102,6 +104,7 @@ export default function MyTaskDetailPage() {
     ]);
     setTask(t);
     setUpdates(u);
+    seedOfflineTask(t as unknown as Record<string, unknown>, u, "update");
   }, [params.id]);
 
   useEffect(() => {
@@ -236,7 +239,7 @@ export default function MyTaskDetailPage() {
             {task.managementDecision ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4">
                 <div className="text-xs font-semibold text-amber-800">
-                  قرار / أمر المدير التنفيذي
+                  قرار / أمر {ROLE_LABELS.ceo}
                 </div>
                 <p className="mt-2 text-sm font-medium">
                   {task.managementDecision}

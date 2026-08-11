@@ -10,6 +10,7 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useLiveNotifications } from "@/hooks/useLiveNotifications";
 import { apiGet } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
+import { ROLE_LABELS } from "@/constants/lookups";
 
 function formatScoreAvg(avg: number | null | undefined) {
   if (avg == null || Number.isNaN(avg)) return "—";
@@ -164,7 +165,7 @@ export default function DashboardPage() {
       ? [
           { key: "total", label: "إجمالي المهام" },
           ...(isGm
-            ? [{ key: "ceoTasks", label: "مهام المدير التنفيذي" }]
+            ? [{ key: "ceoTasks", label: `مهام ${ROLE_LABELS.ceo}` }]
             : []),
           { key: "managerTasks", label: isGm ? "مهام المدراء" : "مهام المدراء والموارد البشرية" },
           { key: "employeeTasks", label: "مهام الموظفين" },
@@ -221,7 +222,7 @@ export default function DashboardPage() {
                 </Link>
                 {role === "ceo" ? (
                   <Link href="/ceo-tasks" className="btn btn-secondary">
-                    مهامي من المدير العام
+                    مهامي من {ROLE_LABELS.general_manager}
                   </Link>
                 ) : null}
                 <Link href="/tasks/new" className="btn btn-primary">

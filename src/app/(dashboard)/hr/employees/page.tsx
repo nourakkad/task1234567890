@@ -15,6 +15,7 @@ import { useSuccessToast } from "@/components/SuccessToast";
 import {
   CEO_DEPARTMENT_NAME,
   CONTRACT_TYPE_LABELS,
+  ROLE_LABELS,
   type ContractType,
 } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
@@ -256,7 +257,7 @@ export default function HrEmployeesPage() {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="إدارة الموظفين"
-        subtitle="إنشاء وتعديل وحذف حسابات الموظفين وربطهم بمدير وقسم أو بالمدير التنفيذي للعقود الخارجية"
+        subtitle={`إنشاء وتعديل وحذف حسابات الموظفين وربطهم بمدير وقسم أو بـ${ROLE_LABELS.ceo} للعقود الخارجية`}
       />
       {error ? <p className="mb-3 text-[var(--danger)]">{error}</p> : null}
       {message ? <p className="mb-3 text-[var(--ok)]">{message}</p> : null}
@@ -291,7 +292,7 @@ export default function HrEmployeesPage() {
                       {CONTRACT_TYPE_LABELS[isExternal ? "external" : "internal"]}
                       {" · "}
                       {isExternal
-                        ? `تحت ${CEO_DEPARTMENT_NAME} مباشرة`
+                        ? `تحت ${ROLE_LABELS.ceo} مباشرة`
                         : `${u.managerId?.name || "بدون مدير"} · ${u.departmentId?.name || "بدون قسم"}`}
                     </div>
                   </div>
@@ -349,7 +350,9 @@ export default function HrEmployeesPage() {
           </div>
           {contractType === "external" ? (
             <div className="rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-3 text-sm">
-              <div className="font-semibold">تحت المدير التنفيذي مباشرة</div>
+              <div className="font-semibold">
+                تحت {ROLE_LABELS.ceo} مباشرة
+              </div>
               <div className="mt-1 text-[var(--muted)]">
                 القسم: {CEO_DEPARTMENT_NAME} — لا يلزم اختيار مدير
               </div>
@@ -450,7 +453,9 @@ export default function HrEmployeesPage() {
             </div>
             {editContractType === "external" ? (
               <div className="rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-3 text-sm">
-                <div className="font-semibold">تحت المدير التنفيذي مباشرة</div>
+                <div className="font-semibold">
+                  تحت {ROLE_LABELS.ceo} مباشرة
+                </div>
                 <div className="mt-1 text-[var(--muted)]">
                   القسم: {CEO_DEPARTMENT_NAME}
                 </div>

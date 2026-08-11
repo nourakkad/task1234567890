@@ -11,6 +11,7 @@ import {
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import {
   DOCUMENT_TYPES,
+  ROLE_LABELS,
   SAMPLE_STATUSES,
   SUPPLIER_DECISIONS,
   TASK_PRIORITIES,
@@ -671,7 +672,7 @@ export default function TaskDetailPage() {
           </div>
           <div className="rounded-xl bg-[var(--brand-soft)] p-3 text-sm">
             لا تُغلق المهمة إلا بعد التقرير النهائي واعتماد الإدارة. عند الحالة
-            «بانتظار قرار الإدارة» يُسجّل قرار المدير التنفيذي هنا.
+            «بانتظار قرار الإدارة» يُسجّل قرار {ROLE_LABELS.ceo} هنا.
           </div>
           <form id="approval-form" className="space-y-3">
             <div className="field">

@@ -8,11 +8,13 @@ import { TaskFilters } from "@/components/tasks/TaskFilters";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useLiveNotifications } from "@/hooks/useLiveNotifications";
 import { apiGet } from "@/lib/client";
+import { rememberTasks } from "@/lib/offlineCatalog";
 import {
   EMPTY_TASK_FILTERS,
   filterTasks,
   type TaskFilterState,
 } from "@/lib/taskFilters";
+import { ROLE_LABELS } from "@/constants/lookups";
 
 /** HR inbox: tasks assigned by GM or CEO */
 export default function HrTasksPage() {
@@ -30,6 +32,7 @@ export default function HrTasksPage() {
         "/api/tasks?fromLeadership=1"
       );
       setTasks(data);
+      void rememberTasks(data);
       setError("");
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : "فشل التحميل");
@@ -76,7 +79,7 @@ export default function HrTasksPage() {
     <div>
       <PageHeader
         title="مهامي من الإدارة"
-        subtitle="المهام المسندة إليك من المدير العام أو المدير التنفيذي"
+        subtitle={`المهام المسندة إليك من ${ROLE_LABELS.general_manager} أو ${ROLE_LABELS.ceo}`}
       />
 
       <TaskFilters

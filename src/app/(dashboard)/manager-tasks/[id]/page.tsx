@@ -8,9 +8,11 @@ import { PageHeader } from "@/components/PageHeader";
 import { PriorityBadge, StatusBadge } from "@/components/StatusBadge";
 import { TimelineList } from "@/components/tasks/TimelineList";
 import { useOfflineSync } from "@/components/OfflineSyncProvider";
+import { ROLE_LABELS } from "@/constants/lookups";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
+import { seedOfflineTask } from "@/lib/seedOfflineTask";
 
 interface TaskDetail {
   _id: string;
@@ -64,9 +66,9 @@ const ACTION_META: Record<
     result: "المهمة بانتظار رد/توريد من المورد",
   },
   request_decision: {
-    label: "طلب قرار من المدير التنفيذي",
+    label: `طلب قرار من ${ROLE_LABELS.ceo}`,
     status: "بانتظار قرار الإدارة",
-    result: "تم طلب قرار من المدير التنفيذي",
+    result: `تم طلب قرار من ${ROLE_LABELS.ceo}`,
   },
   pause: {
     label: "تعليق المهمة",
@@ -76,7 +78,7 @@ const ACTION_META: Record<
   ready_to_close: {
     label: "جاهزة للإنهاء",
     status: "بانتظار قرار الإدارة",
-    result: "المهمة جاهزة للإنهاء بانتظار اعتماد المدير التنفيذي",
+    result: `المهمة جاهزة للإنهاء بانتظار اعتماد ${ROLE_LABELS.ceo}`,
   },
 };
 
@@ -99,6 +101,7 @@ export default function ManagerTaskDetailPage() {
     ]);
     setTask(t);
     setUpdates(u);
+    seedOfflineTask(t as unknown as Record<string, unknown>, u, "update");
   }, [params.id]);
 
   useAutoRefresh(() => load().catch(() => undefined), {
@@ -322,7 +325,7 @@ export default function ManagerTaskDetailPage() {
         <article className="card p-6">
           <h3 className="mb-3 text-lg font-semibold">سجل التحديثات</h3>
           <p className="mb-3 text-xs text-[var(--muted)]">
-            الأحدث أولاً — يشمل تحديثات المدير وأوامر/قرارات المدير التنفيذي
+            الأحدث أولاً — يشمل تحديثات المدير وأوامر/قرارات {ROLE_LABELS.ceo}
           </p>
           <TimelineList items={updates} />
         </article>

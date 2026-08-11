@@ -8,11 +8,13 @@ import { TaskFilters } from "@/components/tasks/TaskFilters";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useLiveNotifications } from "@/hooks/useLiveNotifications";
 import { apiGet } from "@/lib/client";
+import { rememberTasks } from "@/lib/offlineCatalog";
 import {
   EMPTY_TASK_FILTERS,
   filterTasks,
   type TaskFilterState,
 } from "@/lib/taskFilters";
+import { ROLE_LABELS } from "@/constants/lookups";
 
 /** CEO inbox: tasks assigned by General Manager */
 export default function CeoTasksPage() {
@@ -30,6 +32,7 @@ export default function CeoTasksPage() {
         "/api/tasks?fromLeadership=1"
       );
       setTasks(data);
+      void rememberTasks(data);
       setError("");
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : "فشل التحميل");
@@ -41,7 +44,7 @@ export default function CeoTasksPage() {
   useEffect(() => {
     if (authStatus === "loading") return;
     if (!ready) {
-      setError("هذه الصفحة للمدير التنفيذي فقط");
+      setError(`هذه الصفحة لـ ${ROLE_LABELS.ceo} فقط`);
       setLoading(false);
       return;
     }
@@ -67,7 +70,7 @@ export default function CeoTasksPage() {
   if (session?.user?.role !== "ceo") {
     return (
       <div className="card p-6 text-[var(--danger)]">
-        هذه الصفحة للمدير التنفيذي فقط
+        هذه الصفحة لـ {ROLE_LABELS.ceo} فقط
       </div>
     );
   }
@@ -75,8 +78,8 @@ export default function CeoTasksPage() {
   return (
     <div>
       <PageHeader
-        title="مهام من المدير العام"
-        subtitle="المهام المسندة إليك من المدير العام — نفّذ وأضف التحديثات"
+        title={`مهام من ${ROLE_LABELS.general_manager}`}
+        subtitle={`المهام المسندة إليك من ${ROLE_LABELS.general_manager} — نفّذ وأضف التحديثات`}
       />
 
       <TaskFilters
@@ -97,7 +100,7 @@ export default function CeoTasksPage() {
         <p className="text-[var(--muted)]">جارٍ التحميل...</p>
       ) : filtered.length === 0 ? (
         <div className="card p-8 text-center text-[var(--muted)]">
-          لا توجد مهام من المدير العام حاليًا
+          لا توجد مهام من {ROLE_LABELS.general_manager} حاليًا
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

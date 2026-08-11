@@ -15,7 +15,7 @@ import { DailyUpdate } from "@/models/DailyUpdate";
 import { Task } from "@/models/Task";
 import { User } from "@/models/User";
 import { Department } from "@/models/Department";
-import { ROLE_LABELS, type UserRole } from "@/constants/lookups";
+import { ROLE_LABELS, CEO_DEPARTMENT_NAME, type UserRole } from "@/constants/lookups";
 
 export async function GET(request: Request) {
   try {
@@ -219,7 +219,7 @@ export async function POST(request: Request) {
         !isExternalEmployee
       ) {
         return jsonError(
-          "المدير العام يسند المهام للمدير التنفيذي والموارد البشرية والمدراء وموظفي العقود الخارجية فقط",
+          `${ROLE_LABELS.general_manager} يسند المهام لـ${ROLE_LABELS.ceo} والموارد البشرية والمدراء وموظفي العقود الخارجية فقط`,
           403
         );
       }
@@ -258,7 +258,7 @@ export async function POST(request: Request) {
         !isExternalEmployee
       ) {
         return jsonError(
-          "المدير التنفيذي يسند المهام للموارد البشرية والمدراء وموظفي العقود الخارجية فقط",
+          `${ROLE_LABELS.ceo} يسند المهام للموارد البشرية والمدراء وموظفي العقود الخارجية فقط`,
           403
         );
       }
@@ -322,7 +322,7 @@ export async function POST(request: Request) {
         owner.departmentId &&
         String(departmentId) !== owner.departmentId.toString()
       ) {
-        return jsonError("يجب أن تكون المهمة ضمن قسم المدير التنفيذي", 403);
+        return jsonError(`يجب أن تكون المهمة ضمن قسم ${CEO_DEPARTMENT_NAME}`, 403);
       }
     } else if (owner.role === "manager" || owner.role === "employee") {
       return jsonError("القسم مطلوب لهذا المسؤول");
@@ -362,7 +362,7 @@ export async function POST(request: Request) {
         createdBy: user.id,
         text: body.managementDecision || body.nextAction,
         entryType: "gm_order",
-        result: "أمر التكليف من المدير العام",
+        result: `أمر التكليف من ${ROLE_LABELS.general_manager}`,
       });
     }
 
@@ -372,7 +372,7 @@ export async function POST(request: Request) {
         createdBy: user.id,
         text: body.managementDecision || body.nextAction,
         entryType: "ceo_order",
-        result: "أمر التكليف من المدير التنفيذي",
+        result: `أمر التكليف من ${ROLE_LABELS.ceo}`,
       });
     }
 

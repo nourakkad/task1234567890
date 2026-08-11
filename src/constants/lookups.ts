@@ -72,8 +72,8 @@ export const USER_ROLES = [
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const ROLE_LABELS: Record<UserRole, string> = {
-  general_manager: "المدير العام",
-  ceo: "المدير التنفيذي",
+  general_manager: "أ.نبيل عرمان . gm",
+  ceo: "أ.عامر العمري . ceo",
   hr: "الموارد البشرية",
   manager: "مدير",
   employee: "موظف",

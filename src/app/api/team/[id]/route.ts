@@ -14,6 +14,7 @@ import {
   syncManagerDepartments,
 } from "@/lib/departments";
 import { requireSessionUser } from "@/lib/session";
+import { ROLE_LABELS } from "@/constants/lookups";
 import { Department } from "@/models/Department";
 import { Task } from "@/models/Task";
 import { User } from "@/models/User";
@@ -35,7 +36,7 @@ export async function PATCH(request: Request, { params }: Params) {
     // CEO may only edit HR accounts
     if (target.role === "hr") {
       if (!canManageHrAccounts(user.role)) {
-        return jsonError("فقط المدير التنفيذي يعدّل حسابات الموارد البشرية", 403);
+        return jsonError(`فقط ${ROLE_LABELS.ceo} يعدّل حسابات الموارد البشرية`, 403);
       }
 
       if (body.name !== undefined) {
@@ -218,7 +219,7 @@ export async function DELETE(_request: Request, { params }: Params) {
 
     if (target.role === "hr") {
       if (!canManageHrAccounts(user.role)) {
-        return jsonError("فقط المدير التنفيذي يحذف حسابات الموارد البشرية", 403);
+        return jsonError(`فقط ${ROLE_LABELS.ceo} يحذف حسابات الموارد البشرية`, 403);
       }
     } else if (!canManageDirectory(user.role)) {
       return jsonError("فقط الموارد البشرية تحذف المستخدمين", 403);

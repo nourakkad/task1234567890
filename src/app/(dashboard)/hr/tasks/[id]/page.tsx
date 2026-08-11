@@ -11,6 +11,7 @@ import {
   type TimelineItem,
 } from "@/components/tasks/TimelineList";
 import { useOfflineSync } from "@/components/OfflineSyncProvider";
+import { seedOfflineTask } from "@/lib/seedOfflineTask";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { apiGet, apiSend } from "@/lib/client";
 import { formatDate, formatPercent } from "@/lib/format";
@@ -55,9 +56,9 @@ export default function HrTaskDetailPage() {
   const assignerRole = task?.assignedById?.role;
   const assignerLabel =
     assignerRole === "general_manager"
-      ? "المدير العام"
+      ? ROLE_LABELS.general_manager
       : assignerRole === "ceo"
-        ? "المدير التنفيذي"
+        ? ROLE_LABELS.ceo
         : task?.assignedById?.name || "الإدارة";
 
   const actionMeta: Record<
@@ -95,6 +96,7 @@ export default function HrTaskDetailPage() {
     ]);
     setTask(t);
     setUpdates(u);
+    seedOfflineTask(t as unknown as Record<string, unknown>, u, "update");
   }, [params.id]);
 
   useAutoRefresh(() => load().catch(() => undefined), {
