@@ -408,9 +408,13 @@
               (await idbReq(tx.objectStore(ASSIGNEES).getAll())) || [];
             db.close();
             tasks.sort(function (a, b) {
-              return String(a.taskNo || "").localeCompare(
-                String(b.taskNo || ""),
-                "ar"
+              var ta = a.sortAt || "";
+              var tb = b.sortAt || "";
+              if (ta || tb) return tb.localeCompare(ta);
+              return String(b.taskNo || "").localeCompare(
+                String(a.taskNo || ""),
+                "ar",
+                { numeric: true }
               );
             });
             assignees.sort(function (a, b) {

@@ -31,10 +31,14 @@ export async function GET(request: Request) {
     const managerTasks = searchParams.get("managerTasks") === "1";
     const leadershipTasks = searchParams.get("leadershipTasks") === "1";
     const fromLeadership = searchParams.get("fromLeadership") === "1";
+    const ownedByMe = searchParams.get("ownedByMe") === "1";
 
     let filter: Record<string, unknown> = await getVisibleTaskFilter(user);
 
-    if (fromCeo || fromLeadership) {
+    if (ownedByMe) {
+      // Tasks this user is responsible for (owner) — used by offline catalog
+      filter = { ownerId: new Types.ObjectId(user.id) };
+    } else if (fromCeo || fromLeadership) {
       // Inbox: tasks assigned TO this user (manager / CEO / HR)
       if (
         user.role !== "manager" &&
@@ -45,16 +49,12 @@ export async function GET(request: Request) {
       }
 
       filter = { ownerId: new Types.ObjectId(user.id) };
-    }
-
-    if (fromManager) {
+    } else if (fromManager) {
       if (user.role !== "employee") {
         return jsonError("هذه الصفحة للموظفين فقط", 403);
       }
       filter = { ownerId: new Types.ObjectId(user.id) };
-    }
-
-    if (teamAssigned) {
+    } else if (teamAssigned) {
       if (user.role !== "manager") {
         return jsonError("هذه الصفحة للمدراء فقط", 403);
       }
@@ -63,9 +63,7 @@ export async function GET(request: Request) {
         assignedById: new Types.ObjectId(user.id),
         ownerId: { $ne: new Types.ObjectId(user.id) },
       };
-    }
-
-    if (employeeTasks) {
+    } else if (employeeTasks) {
       if (user.role !== "ceo" && user.role !== "general_manager") {
         return jsonError("غير مصرح", 403);
       }
@@ -76,9 +74,7 @@ export async function GET(request: Request) {
       filter = {
         ownerId: { $in: employees.map((e) => e._id) },
       };
-    }
-
-    if (managerTasks) {
+    } else if (managerTasks) {
       // CEO tracks managers + HR
       if (user.role !== "ceo") {
         return jsonError("غير مصرح", 403);
@@ -90,9 +86,7 @@ export async function GET(request: Request) {
       filter = {
         ownerId: { $in: assignees.map((m) => m._id) },
       };
-    }
-
-    if (leadershipTasks) {
+    } else if (leadershipTasks) {
       // GM tracks CEO + HR + managers
       if (user.role !== "general_manager") {
         return jsonError("هذه الصفحة للمدير العام فقط", 403);

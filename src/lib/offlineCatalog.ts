@@ -1,7 +1,7 @@
 /** Local cache of tasks/assignees for composing offline actions. */
 
 const DB_NAME = "alhadara-offline-catalog";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const TASKS = "tasks";
 const ASSIGNEES = "assignees";
 
@@ -10,6 +10,8 @@ export type CachedTask = {
   taskNo: string;
   name: string;
   status?: string;
+  /** ISO date — used to sort newest first */
+  sortAt?: string;
 };
 
 export type CachedAssignee = {
@@ -50,26 +52,57 @@ function idbReq<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
-export async function rememberTasks(
+function taskSortAt(t: {
+  updatedAt?: string | Date;
+  createdAt?: string | Date;
+  assignedDate?: string | Date;
+  taskNo?: string;
+}): string {
+  const raw = t.updatedAt || t.createdAt || t.assignedDate;
+  if (raw) {
+    const d = raw instanceof Date ? raw : new Date(raw);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return "";
+}
+
+function sortTasksNewestFirst(rows: CachedTask[]): CachedTask[] {
+  return [...rows].sort((a, b) => {
+    const ta = a.sortAt || "";
+    const tb = b.sortAt || "";
+    if (ta || tb) return tb.localeCompare(ta);
+    // Fallback: higher / newer taskNo first
+    return (b.taskNo || "").localeCompare(a.taskNo || "", "ar", {
+      numeric: true,
+    });
+  });
+}
+
+/** Replace the whole owned-task list (clears previous broader caches). */
+export async function replaceCachedTasks(
   tasks: Array<{
     _id: string;
     taskNo?: string;
     name?: string;
     status?: string;
+    updatedAt?: string | Date;
+    createdAt?: string | Date;
+    assignedDate?: string | Date;
   }>
 ): Promise<void> {
-  if (!tasks?.length) return;
   try {
     const db = await openDb();
     const tx = db.transaction(TASKS, "readwrite");
     const store = tx.objectStore(TASKS);
-    for (const t of tasks) {
+    await idbReq(store.clear());
+    for (const t of tasks || []) {
       if (!t?._id) continue;
       store.put({
         _id: String(t._id),
         taskNo: String(t.taskNo || ""),
         name: String(t.name || ""),
         status: t.status ? String(t.status) : "",
+        sortAt: taskSortAt(t),
       } satisfies CachedTask);
     }
     await new Promise<void>((resolve, reject) => {
@@ -117,9 +150,7 @@ export async function listCachedTasks(): Promise<CachedTask[]> {
     const tx = db.transaction(TASKS, "readonly");
     const rows = await idbReq<CachedTask[]>(tx.objectStore(TASKS).getAll());
     db.close();
-    return (rows || []).sort((a, b) =>
-      (a.taskNo || "").localeCompare(b.taskNo || "", "ar")
-    );
+    return sortTasksNewestFirst(rows || []);
   } catch {
     return [];
   }

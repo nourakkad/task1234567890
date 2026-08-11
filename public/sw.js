@@ -2,9 +2,9 @@
  * - Cache app shell / static assets so reopen works offline
  * - NEVER intercept /api or NextAuth (breaks iOS session cookies)
  * - Offline fallback is static /offline.html (works without Next.js JS)
- * Version: v4-offline-workbench
+ * Version: v5-owned-tasks
  */
-const CACHE = "alhadara-v4";
+const CACHE = "alhadara-v5";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [
   OFFLINE_URL,

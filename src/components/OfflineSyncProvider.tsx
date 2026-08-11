@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useSession } from "next-auth/react";
 import { useSuccessToast } from "@/components/SuccessToast";
 import {
   countOfflineActions,
@@ -23,7 +24,7 @@ import {
 } from "@/lib/offlineQueue";
 import {
   rememberAssignees,
-  rememberTasks,
+  replaceCachedTasks,
   type CachedAssignee,
 } from "@/lib/offlineCatalog";
 import { emitNotificationsUpdate } from "@/hooks/useLiveNotifications";
@@ -70,6 +71,7 @@ type OfflineSyncContextValue = {
 const OfflineSyncContext = createContext<OfflineSyncContextValue | null>(null);
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
+  const { status: sessionStatus } = useSession();
   const showSuccess = useSuccessToast();
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState<OfflineAction[]>([]);
@@ -82,19 +84,29 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
   const refreshCatalog = useCallback(async () => {
     if (!isBrowserOnline()) return;
+    if (sessionStatus !== "authenticated") return;
     try {
       const [tasks, users] = await Promise.all([
         fetchJsonQuiet<
-          Array<{ _id: string; taskNo?: string; name?: string; status?: string }>
-        >("/api/tasks"),
+          Array<{
+            _id: string;
+            taskNo?: string;
+            name?: string;
+            status?: string;
+            updatedAt?: string;
+            createdAt?: string;
+            assignedDate?: string;
+          }>
+        >("/api/tasks?ownedByMe=1"),
         fetchJsonQuiet<CachedAssignee[]>("/api/users/assignable"),
       ]);
-      if (Array.isArray(tasks)) await rememberTasks(tasks);
+      // Always replace so a previous "all visible tasks" cache is cleared
+      if (Array.isArray(tasks)) await replaceCachedTasks(tasks);
       if (Array.isArray(users)) await rememberAssignees(users);
     } catch {
       // ignore catalog refresh errors
     }
-  }, []);
+  }, [sessionStatus]);
 
   const flushNow = useCallback(async () => {
     if (!isBrowserOnline()) return;
@@ -175,7 +187,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     window.addEventListener(OFFLINE_QUEUE_EVENT, onQueue);
 
     if (isBrowserOnline()) {
-      void refreshCatalog();
       void countOfflineActions().then((n) => {
         if (n > 0) void flushNow();
       });
@@ -187,6 +198,13 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       window.removeEventListener(OFFLINE_QUEUE_EVENT, onQueue);
     };
   }, [flushNow, refresh, refreshCatalog]);
+
+  // Seed owned-task catalog once the session is ready
+  useEffect(() => {
+    if (sessionStatus === "authenticated" && isBrowserOnline()) {
+      void refreshCatalog();
+    }
+  }, [sessionStatus, refreshCatalog]);
 
   const value = useMemo<OfflineSyncContextValue>(
     () => ({
