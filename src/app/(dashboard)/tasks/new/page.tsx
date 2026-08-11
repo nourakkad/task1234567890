@@ -26,6 +26,13 @@ function todayInputDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function userDeptId(user?: AssignableUser | null): string {
+  if (!user?.departmentId) return "";
+  return typeof user.departmentId === "string"
+    ? user.departmentId
+    : user.departmentId._id;
+}
+
 export default function NewTaskPage() {
   const router = useRouter();
   const showSuccess = useSuccessToast();
@@ -44,8 +51,23 @@ export default function NewTaskPage() {
     description: "",
     ownerId: "",
     departmentId: "",
+    targetDate: "",
     managementDecision: "",
   });
+
+  const managerDeptIds = session?.user?.departmentIds || [];
+  const managerDepartments = useMemo(() => {
+    if (!isManager) return [];
+    if (managerDeptIds.length > 0) {
+      const filtered = departments.filter((d) =>
+        managerDeptIds.includes(d._id)
+      );
+      return filtered.length > 0 ? filtered : departments;
+    }
+    return departments;
+  }, [isManager, managerDeptIds, departments]);
+
+  const managerNeedsDeptFirst = isManager && managerDepartments.length > 1;
 
   const selectedOwner = users.find((u) => u._id === form.ownerId);
   const isExternalOwner =
@@ -83,12 +105,18 @@ export default function NewTaskPage() {
             _id: String(row._id),
           }))
         );
-        setDepartments(Array.isArray(d) ? d : []);
+        const depts = Array.isArray(d) ? d : [];
+        setDepartments(depts);
+
         if (isManager) {
           const ids = session?.user?.departmentIds || [];
-          const primary = ids[0] || session?.user?.departmentId || "";
-          if (primary) {
-            setForm((f) => ({ ...f, departmentId: primary }));
+          if (ids.length === 1) {
+            setForm((f) => ({ ...f, departmentId: ids[0] }));
+          } else if (ids.length === 0 && session?.user?.departmentId) {
+            setForm((f) => ({
+              ...f,
+              departmentId: session.user!.departmentId as string,
+            }));
           }
         }
       })
@@ -112,31 +140,21 @@ export default function NewTaskPage() {
     session?.user?.departmentIds,
   ]);
 
-  const availableDepartments = useMemo(() => {
-    if (isManager) {
-      const ids = session?.user?.departmentIds || [];
-      if (ids.length > 0) {
-        const filtered = departments.filter((d) => ids.includes(d._id));
-        return filtered.length > 0 ? filtered : departments;
-      }
+  /** Employees shown to a manager (filtered by selected department when multi-dept). */
+  const managerVisibleUsers = useMemo(() => {
+    if (!isManager) return users;
+    if (!form.departmentId) {
+      return managerNeedsDeptFirst ? [] : users;
     }
+    return users.filter((u) => userDeptId(u) === form.departmentId);
+  }, [isManager, users, form.departmentId, managerNeedsDeptFirst]);
+
+  /** Departments available after picking a non-manager-flow owner (CEO/GM). */
+  const ownerDepartments = useMemo(() => {
+    if (isManager) return [];
     if (selectedOwner?.role === "manager") {
       const managed = selectedOwner.managedDepartments || [];
       if (managed.length > 0) return managed;
-    }
-    if (
-      selectedOwner?.role === "employee" &&
-      selectedOwner.contractType === "external" &&
-      selectedOwner.departmentId
-    ) {
-      const dept =
-        typeof selectedOwner.departmentId === "string"
-          ? departments.find((d) => d._id === selectedOwner.departmentId)
-          : {
-              _id: selectedOwner.departmentId._id,
-              name: selectedOwner.departmentId.name,
-            };
-      return dept ? [dept] : [];
     }
     if (selectedOwner?.departmentId) {
       const dept =
@@ -149,50 +167,63 @@ export default function NewTaskPage() {
       return dept ? [dept] : [];
     }
     return [];
-  }, [
-    isManager,
-    session?.user?.departmentIds,
-    departments,
-    selectedOwner,
-  ]);
+  }, [isManager, selectedOwner, departments]);
 
-  const showDepartmentPicker =
+  const showOwnerDepartmentPicker =
+    !isManager &&
     Boolean(selectedOwner) &&
     !ownerNeedsNoDept &&
     !isExternalOwner &&
-    availableDepartments.length > 1;
+    ownerDepartments.length > 1;
+
+  function onManagerDepartmentChange(departmentId: string) {
+    setForm((f) => {
+      const stillValid =
+        f.ownerId &&
+        users.some(
+          (u) => u._id === f.ownerId && userDeptId(u) === departmentId
+        );
+      return {
+        ...f,
+        departmentId,
+        ownerId: stillValid ? f.ownerId : "",
+      };
+    });
+  }
 
   function onOwnerChange(ownerId: string) {
     const owner = users.find((u) => u._id === ownerId);
-    let departmentId = "";
+    let departmentId = form.departmentId;
+
+    if (isManager) {
+      // Keep department already chosen (or single auto dept)
+      if (!departmentId) {
+        departmentId = userDeptId(owner) || managerDeptIds[0] || "";
+      }
+      setForm((f) => ({ ...f, ownerId, departmentId }));
+      return;
+    }
+
+    departmentId = "";
     if (owner?.role === "manager") {
       const managed = owner.managedDepartments || [];
       if (managed.length === 1) departmentId = managed[0]._id;
       else if (managed.length > 1) departmentId = "";
       else if (owner.departmentId) {
-        departmentId =
-          typeof owner.departmentId === "string"
-            ? owner.departmentId
-            : owner.departmentId._id;
+        departmentId = userDeptId(owner);
       }
     } else if (owner?.departmentId) {
-      departmentId =
-        typeof owner.departmentId === "string"
-          ? owner.departmentId
-          : owner.departmentId._id;
-    }
-    if (isManager) {
-      const ids = session?.user?.departmentIds || [];
-      if (ids.length === 1) departmentId = ids[0];
-      else if (ids.length > 1) {
-        departmentId = ids.includes(departmentId) ? departmentId : "";
-      }
+      departmentId = userDeptId(owner);
     }
     setForm((f) => ({ ...f, ownerId, departmentId }));
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (managerNeedsDeptFirst && !form.departmentId) {
+      setError("اختر القسم أولًا");
+      return;
+    }
     if (!form.ownerId) {
       setError("اختر المسؤول من القائمة");
       return;
@@ -202,8 +233,12 @@ export default function NewTaskPage() {
       setError("أدخل الأمر");
       return;
     }
-    if (showDepartmentPicker && !form.departmentId) {
+    if (showOwnerDepartmentPicker && !form.departmentId) {
       setError("اختر القسم");
+      return;
+    }
+    if (!form.targetDate) {
+      setError("أدخل تاريخ التسليم");
       return;
     }
     setLoading(true);
@@ -217,6 +252,7 @@ export default function NewTaskPage() {
         priority: "متوسطة",
         status: "لم تبدأ",
         assignedDate: todayInputDate(),
+        targetDate: form.targetDate,
         managementDecision: isGm || isCeo ? orderText : "",
         nextAction: orderText,
         progress: 0,
@@ -250,6 +286,8 @@ export default function NewTaskPage() {
       ? "المسؤول (موارد بشرية / مدير / عقد خارجي)"
       : "الموظف المسؤول";
 
+  const visibleAssignees = isManager ? managerVisibleUsers : users;
+
   if (authStatus === "loading") {
     return <p className="text-[var(--muted)]">جارٍ التحميل...</p>;
   }
@@ -271,53 +309,98 @@ export default function NewTaskPage() {
           />
         </div>
 
-        <div className="field md:col-span-2">
-          <label>{ownerLabel}</label>
-          <AssigneePicker
-            users={users}
-            value={form.ownerId}
-            onChange={onOwnerChange}
-            loading={listLoading}
-            emptyLabel={
-              isManager
-                ? "لا يوجد موظفون مرتبطون بك كمدير — اطلب من الموارد البشرية ربطهم بحسابك"
-                : "لا يوجد أشخاص متاحون للإسناد"
-            }
-          />
-          {!listLoading && users.length > 0 ? (
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              {form.ownerId
-                ? `المختار: ${selectedOwner?.name || ""}`
-                : `اضغط لاختيار شخص من القائمة (${users.length})`}
-            </p>
-          ) : null}
-        </div>
+        {isManager ? (
+          <>
+            {managerNeedsDeptFirst ? (
+              <div className="field md:col-span-2">
+                <label>القسم</label>
+                <select
+                  required
+                  value={form.departmentId}
+                  onChange={(e) => onManagerDepartmentChange(e.target.value)}
+                >
+                  <option value="">اختر القسم أولًا...</option>
+                  {managerDepartments.map((d) => (
+                    <option key={d._id} value={d._id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  بعد اختيار القسم تظهر موظفو هذا القسم فقط
+                </p>
+              </div>
+            ) : null}
 
-        {showDepartmentPicker ? (
-          <div className="field md:col-span-2">
-            <label>القسم</label>
-            <select
-              required
-              value={form.departmentId}
-              onChange={(e) =>
-                setForm({ ...form, departmentId: e.target.value })
-              }
-            >
-              <option value="">اختر القسم...</option>
-              {availableDepartments.map((d) => (
-                <option key={d._id} value={d._id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
+            <div className="field md:col-span-2">
+              <label>{ownerLabel}</label>
+              <AssigneePicker
+                users={visibleAssignees}
+                value={form.ownerId}
+                onChange={onOwnerChange}
+                loading={listLoading}
+                emptyLabel={
+                  managerNeedsDeptFirst && !form.departmentId
+                    ? "اختر القسم أولًا لعرض الموظفين"
+                    : managerNeedsDeptFirst && form.departmentId
+                      ? "لا يوجد موظفون في هذا القسم"
+                      : "لا يوجد موظفون مرتبطون بك كمدير — اطلب من الموارد البشرية ربطهم بحسابك"
+                }
+              />
+              {!listLoading && form.ownerId ? (
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  المختار: {selectedOwner?.name || ""}
+                </p>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="field md:col-span-2">
+              <label>{ownerLabel}</label>
+              <AssigneePicker
+                users={users}
+                value={form.ownerId}
+                onChange={onOwnerChange}
+                loading={listLoading}
+                emptyLabel="لا يوجد أشخاص متاحون للإسناد"
+              />
+              {!listLoading && users.length > 0 ? (
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  {form.ownerId
+                    ? `المختار: ${selectedOwner?.name || ""}`
+                    : `اضغط لاختيار شخص من القائمة (${users.length})`}
+                </p>
+              ) : null}
+            </div>
 
-        {isExternalOwner ? (
-          <div className="md:col-span-2 rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-2.5 text-sm font-semibold text-[var(--brand)]">
-            عقد خارجي
-          </div>
-        ) : null}
+            {showOwnerDepartmentPicker ? (
+              <div className="field md:col-span-2">
+                <label>القسم</label>
+                <select
+                  required
+                  value={form.departmentId}
+                  onChange={(e) =>
+                    setForm({ ...form, departmentId: e.target.value })
+                  }
+                >
+                  <option value="">اختر القسم...</option>
+                  {ownerDepartments.map((d) => (
+                    <option key={d._id} value={d._id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {isExternalOwner ? (
+              <div className="md:col-span-2 rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-2.5 text-sm font-semibold text-[var(--brand)]">
+                عقد خارجي
+              </div>
+            ) : null}
+          </>
+        )}
 
         <div className="field md:col-span-2">
           <label>الأمر</label>
@@ -332,6 +415,17 @@ export default function NewTaskPage() {
             }
             placeholder="اكتب الأمر المطلوب تنفيذه..."
             required
+          />
+        </div>
+
+        <div className="field">
+          <label>تاريخ التسليم</label>
+          <input
+            type="date"
+            required
+            value={form.targetDate}
+            min={todayInputDate()}
+            onChange={(e) => setForm({ ...form, targetDate: e.target.value })}
           />
         </div>
 
@@ -352,7 +446,12 @@ export default function NewTaskPage() {
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={loading || listLoading || !form.ownerId}
+            disabled={
+              loading ||
+              listLoading ||
+              !form.ownerId ||
+              (managerNeedsDeptFirst && !form.departmentId)
+            }
           >
             {loading ? "جارٍ الحفظ..." : "إسناد المهمة"}
           </button>
