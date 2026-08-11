@@ -224,12 +224,12 @@ export function NotificationBell({
 
       {open ? (
         <div
-          className={`absolute z-[60] mt-2 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg-elevated)] shadow-xl ${
+          className={`absolute z-[60] mt-2 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg-elevated)] text-[var(--ink)] shadow-xl ${
             variant === "dark" ? "start-0" : "end-0"
           }`}
         >
           <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2.5">
-            <div className="font-semibold">الإشعارات</div>
+            <div className="font-semibold text-[var(--ink)]">الإشعارات</div>
             {unreadCount > 0 ? (
               <button
                 type="button"
@@ -252,7 +252,7 @@ export function NotificationBell({
                   key={n._id}
                   type="button"
                   onClick={() => void markOne(n)}
-                  className={`block w-full border-b border-[var(--line)] px-3 py-3 text-start last:border-0 hover:bg-[var(--brand-soft)] ${
+                  className={`block w-full border-b border-[var(--line)] px-3 py-3 text-start text-[var(--ink)] last:border-0 hover:bg-[var(--brand-soft)] ${
                     n.readAt ? "opacity-70" : ""
                   }`}
                 >
@@ -263,7 +263,9 @@ export function NotificationBell({
                       <span className="mt-1.5 h-2 w-2 shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold">{n.title}</div>
+                      <div className="text-sm font-semibold text-[var(--ink)]">
+                        {n.title}
+                      </div>
                       {n.body ? (
                         <div className="mt-0.5 line-clamp-2 text-xs text-[var(--muted)]">
                           {n.body}
