@@ -1,11 +1,13 @@
 /* Alhadara PWA service worker
  * - Cache app shell / static assets so reopen works offline
  * - NEVER intercept /api or NextAuth (breaks iOS session cookies)
- * Version: v3-shell-cache
+ * - Offline fallback is static /offline.html (works without Next.js JS)
+ * Version: v4-offline-workbench
  */
-const CACHE = "alhadara-v3";
+const CACHE = "alhadara-v4";
+const OFFLINE_URL = "/offline.html";
 const PRECACHE = [
-  "/offline",
+  OFFLINE_URL,
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
@@ -65,7 +67,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigations — network first, then cache, then /offline
+  // Navigations — network first, then cache, then static offline workbench
   if (req.mode === "navigate") {
     event.respondWith(networkFirstNavigate(req));
     return;
@@ -97,7 +99,7 @@ async function networkFirstNavigate(req) {
   } catch {
     const cached = await cache.match(req);
     if (cached) return cached;
-    const offline = await cache.match("/offline");
+    const offline = await cache.match(OFFLINE_URL);
     if (offline) return offline;
     return new Response("Offline", {
       status: 503,
@@ -122,7 +124,14 @@ async function staleWhileRevalidate(req) {
     void networkPromise;
     return cached;
   }
-  const res = await networkPromise;
-  if (res) return res;
-  return new Response("", { status: 504 });
+  const network = await networkPromise;
+  if (network) return network;
+  if (req.url.endsWith("/offline") || req.url.endsWith("/offline.html")) {
+    const offline = await cache.match(OFFLINE_URL);
+    if (offline) return offline;
+  }
+  return new Response("Offline", {
+    status: 503,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
 }

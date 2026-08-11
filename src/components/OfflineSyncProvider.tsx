@@ -21,7 +21,28 @@ import {
   type OfflineAction,
   type OfflineActionType,
 } from "@/lib/offlineQueue";
+import {
+  rememberAssignees,
+  rememberTasks,
+  type CachedAssignee,
+} from "@/lib/offlineCatalog";
 import { emitNotificationsUpdate } from "@/hooks/useLiveNotifications";
+
+async function fetchJsonQuiet<T>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(url, {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
 
 type EnqueueInput = {
   type: OfflineActionType;
@@ -59,6 +80,22 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     setPending(rows);
   }, []);
 
+  const refreshCatalog = useCallback(async () => {
+    if (!isBrowserOnline()) return;
+    try {
+      const [tasks, users] = await Promise.all([
+        fetchJsonQuiet<
+          Array<{ _id: string; taskNo?: string; name?: string; status?: string }>
+        >("/api/tasks"),
+        fetchJsonQuiet<CachedAssignee[]>("/api/users/assignable"),
+      ]);
+      if (Array.isArray(tasks)) await rememberTasks(tasks);
+      if (Array.isArray(users)) await rememberAssignees(users);
+    } catch {
+      // ignore catalog refresh errors
+    }
+  }, []);
+
   const flushNow = useCallback(async () => {
     if (!isBrowserOnline()) return;
     setSyncing(true);
@@ -73,10 +110,11 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         );
         emitNotificationsUpdate();
       }
+      await refreshCatalog();
     } finally {
       setSyncing(false);
     }
-  }, [refresh, showSuccess]);
+  }, [refresh, refreshCatalog, showSuccess]);
 
   const enqueue = useCallback(
     async (input: EnqueueInput) => {
@@ -127,6 +165,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     const onOnline = () => {
       setOnline(true);
       void flushNow();
+      void refreshCatalog();
     };
     const onOffline = () => setOnline(false);
     const onQueue = () => void refresh();
@@ -135,8 +174,8 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     window.addEventListener("offline", onOffline);
     window.addEventListener(OFFLINE_QUEUE_EVENT, onQueue);
 
-    // Initial flush if anything pending and online
     if (isBrowserOnline()) {
+      void refreshCatalog();
       void countOfflineActions().then((n) => {
         if (n > 0) void flushNow();
       });
@@ -147,7 +186,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("offline", onOffline);
       window.removeEventListener(OFFLINE_QUEUE_EVENT, onQueue);
     };
-  }, [flushNow, refresh]);
+  }, [flushNow, refresh, refreshCatalog]);
 
   const value = useMemo<OfflineSyncContextValue>(
     () => ({

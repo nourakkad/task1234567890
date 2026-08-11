@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#16325c" />
+    <title>وضع بدون إنترنت | إدارة المهام</title>
+    <style>
+      :root {
+        --brand: #16325c;
+        --brand-deep: #163849;
+        --accent: #2ebab8;
+        --bg: #f4f6f9;
+        --ink: #16325c;
+        --muted: #5c6b7a;
+        --line: #d5dde5;
+        --danger: #b42318;
+        --ok: #2ebab8;
+        --white: #fff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 12% 0%, #d8e4f2 0%, transparent 42%),
+          radial-gradient(circle at 88% 8%, #d8f4f3 0%, transparent 36%),
+          var(--bg);
+        min-height: 100vh;
+      }
+      main {
+        max-width: 32rem;
+        margin: 0 auto;
+        padding: 1.5rem 1rem;
+      }
+      .brand {
+        text-align: center;
+        font-size: 0.75rem;
+        letter-spacing: 0.2em;
+        color: var(--accent);
+      }
+      h1 {
+        text-align: center;
+        margin: 0.5rem 0 0;
+        font-size: 1.5rem;
+      }
+      .sub {
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin: 0.5rem 0 1rem;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: center;
+        margin-bottom: 1rem;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        padding: 0.55rem 1rem;
+        border: 1px solid transparent;
+        cursor: pointer;
+        font: inherit;
+        text-decoration: none;
+        color: inherit;
+      }
+      .btn-primary {
+        background: var(--brand);
+        color: #fff;
+      }
+      .btn-secondary {
+        background: #fff;
+        border-color: var(--line);
+      }
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .tabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 0.25rem;
+        border: 1px solid var(--line);
+        background: #fff;
+        border-radius: 12px;
+        padding: 0.25rem;
+        margin-bottom: 1rem;
+      }
+      .tab {
+        border: 0;
+        background: transparent;
+        border-radius: 10px;
+        padding: 0.55rem 0.35rem;
+        font: inherit;
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .tab.active {
+        background: var(--brand);
+        color: #fff;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 1rem;
+      }
+      .card h2 {
+        margin: 0 0 0.75rem;
+        font-size: 1.05rem;
+      }
+      .field {
+        display: grid;
+        gap: 0.35rem;
+        margin-bottom: 0.75rem;
+      }
+      .field label {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .field input,
+      .field select,
+      .field textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0.55rem 0.7rem;
+        font: inherit;
+        background: #fff;
+      }
+      .msg {
+        font-size: 0.9rem;
+        margin: 0 0 0.75rem;
+      }
+      .msg.err {
+        color: var(--danger);
+      }
+      .msg.ok {
+        color: var(--ok);
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin: 0;
+      }
+      .panel {
+        display: none;
+      }
+      .panel.active {
+        display: block;
+      }
+      .pending-item {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 0.65rem 0.75rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+      }
+      .pending-item .meta {
+        margin-top: 0.2rem;
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+      .w-full {
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">ALHDARA</div>
+      <h1>وضع بدون إنترنت</h1>
+      <p class="sub" id="statusText">
+        أضف تحديثًا أو أسند مهمة الآن، ويُرسل تلقائيًا عند توفر الإنترنت
+      </p>
+
+      <div class="actions">
+        <a class="btn btn-primary" href="/dashboard" id="backLink" hidden
+          >العودة للنظام</a
+        >
+        <button class="btn btn-secondary" type="button" id="retryBtn">
+          إعادة المحاولة
+        </button>
+        <button class="btn btn-secondary" type="button" id="syncBtn" hidden>
+          مزامنة
+        </button>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" type="button" data-tab="update">تحديث</button>
+        <button class="tab" type="button" data-tab="assign">إسناد</button>
+        <button class="tab" type="button" data-tab="pending">
+          انتظار (<span id="pendingCount">0</span>)
+        </button>
+      </div>
+
+      <p class="msg err" id="err" hidden></p>
+      <p class="msg ok" id="ok" hidden></p>
+
+      <section class="panel active card" id="panel-update">
+        <h2>إضافة تحديث لمهمة</h2>
+        <p class="hint" id="tasksEmpty" hidden>
+          لا توجد مهام محفوظة على الجهاز بعد. افتح التطبيق وأنت متصل مرة وافتح
+          قوائم المهام أولًا.
+        </p>
+        <form id="form-update">
+          <div class="field">
+            <label for="taskId">المهمة</label>
+            <select id="taskId" required>
+              <option value="">— اختر —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="updateText">نص التحديث</label>
+            <textarea
+              id="updateText"
+              rows="4"
+              required
+              placeholder="اكتب ما تريد إرساله..."
+            ></textarea>
+          </div>
+          <button class="btn btn-primary w-full" type="submit">
+            حفظ التحديث محليًا
+          </button>
+        </form>
+      </section>
+
+      <section class="panel card" id="panel-assign">
+        <h2>إسناد مهمة جديدة</h2>
+        <p class="hint" id="assigneesEmpty" hidden>
+          لا توجد قائمة مسؤولين محفوظة. افتح صفحة «إسناد مهمة» وأنت متصل مرة
+          واحدة لتحميل الأسماء.
+        </p>
+        <form id="form-assign">
+          <div class="field">
+            <label for="title">عنوان المهمة</label>
+            <input id="title" required />
+          </div>
+          <div class="field">
+            <label for="ownerId">المسؤول</label>
+            <select id="ownerId" required>
+              <option value="">— اختر —</option>
+            </select>
+          </div>
+          <div class="field" id="deptField" hidden>
+            <label for="departmentId">القسم</label>
+            <select id="departmentId">
+              <option value="">اختر القسم...</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="order">الأمر</label>
+            <textarea id="order" rows="3" required></textarea>
+          </div>
+          <div class="field">
+            <label for="targetDate">تاريخ التسليم</label>
+            <input id="targetDate" type="date" required />
+          </div>
+          <div class="field">
+            <label for="description">الوصف (اختياري)</label>
+            <textarea id="description" rows="2"></textarea>
+          </div>
+          <button class="btn btn-primary w-full" type="submit">
+            حفظ الإسناد محليًا
+          </button>
+        </form>
+      </section>
+
+      <section class="panel card" id="panel-pending">
+        <h2>بانتظار الإرسال</h2>
+        <div id="pendingList">
+          <p class="hint">لا عمليات معلّقة</p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        var QUEUE_DB = "alhadara-offline";
+        var QUEUE_STORE = "queue";
+        var CAT_DB = "alhadara-offline-catalog";
+        var TASKS = "tasks";
+        var ASSIGNEES = "assignees";
+
+        var tasks = [];
+        var assignees = [];
+        var pending = [];
+
+        function today() {
+          return new Date().toISOString().slice(0, 10);
+        }
+
+        function newId() {
+          return (
+            "off_" + Date.now() + "_" + Math.random().toString(36).slice(2, 9)
+          );
+        }
+
+        function openDb(name, version, upgrade) {
+          return new Promise(function (resolve, reject) {
+            var req = indexedDB.open(name, version);
+            req.onupgradeneeded = function () {
+              upgrade(req.result);
+            };
+            req.onsuccess = function () {
+              resolve(req.result);
+            };
+            req.onerror = function () {
+              reject(req.error);
+            };
+          });
+        }
+
+        function idbReq(request) {
+          return new Promise(function (resolve, reject) {
+            request.onsuccess = function () {
+              resolve(request.result);
+            };
+            request.onerror = function () {
+              reject(request.error);
+            };
+          });
+        }
+
+        function openQueue() {
+          return openDb(QUEUE_DB, 1, function (db) {
+            if (!db.objectStoreNames.contains(QUEUE_STORE)) {
+              db.createObjectStore(QUEUE_STORE, { keyPath: "id" });
+            }
+          });
+        }
+
+        function openCatalog() {
+          return openDb(CAT_DB, 1, function (db) {
+            if (!db.objectStoreNames.contains(TASKS)) {
+              db.createObjectStore(TASKS, { keyPath: "_id" });
+            }
+            if (!db.objectStoreNames.contains(ASSIGNEES)) {
+              db.createObjectStore(ASSIGNEES, { keyPath: "_id" });
+            }
+          });
+        }
+
+        function setMsg(kind, text) {
+          var err = document.getElementById("err");
+          var ok = document.getElementById("ok");
+          err.hidden = true;
+          ok.hidden = true;
+          if (!text) return;
+          if (kind === "err") {
+            err.textContent = text;
+            err.hidden = false;
+          } else {
+            ok.textContent = text;
+            ok.hidden = false;
+          }
+        }
+
+        function showTab(name) {
+          document.querySelectorAll(".tab").forEach(function (btn) {
+            btn.classList.toggle("active", btn.getAttribute("data-tab") === name);
+          });
+          document.querySelectorAll(".panel").forEach(function (panel) {
+            panel.classList.toggle(
+              "active",
+              panel.id === "panel-" + name
+            );
+          });
+          setMsg("", "");
+        }
+
+        function assigneeDeptId(user) {
+          if (!user || !user.departmentId) return "";
+          if (typeof user.departmentId === "string") return user.departmentId;
+          return user.departmentId._id || "";
+        }
+
+        function ownerDepts(user) {
+          if (!user) return [];
+          if (user.managedDepartments && user.managedDepartments.length) {
+            return user.managedDepartments;
+          }
+          var id = assigneeDeptId(user);
+          if (!id) return [];
+          var name =
+            typeof user.departmentId === "object" && user.departmentId
+              ? user.departmentId.name || id
+              : id;
+          return [{ _id: id, name: name }];
+        }
+
+        async function loadCatalog() {
+          try {
+            var db = await openCatalog();
+            var tx = db.transaction([TASKS, ASSIGNEES], "readonly");
+            tasks = (await idbReq(tx.objectStore(TASKS).getAll())) || [];
+            assignees =
+              (await idbReq(tx.objectStore(ASSIGNEES).getAll())) || [];
+            db.close();
+            tasks.sort(function (a, b) {
+              return String(a.taskNo || "").localeCompare(
+                String(b.taskNo || ""),
+                "ar"
+              );
+            });
+            assignees.sort(function (a, b) {
+              return String(a.name || "").localeCompare(
+                String(b.name || ""),
+                "ar"
+              );
+            });
+          } catch (e) {
+            tasks = [];
+            assignees = [];
+          }
+
+          var taskSelect = document.getElementById("taskId");
+          taskSelect.innerHTML = '<option value="">— اختر —</option>';
+          tasks.forEach(function (t) {
+            var opt = document.createElement("option");
+            opt.value = t._id;
+            opt.textContent = (t.taskNo || "") + " — " + (t.name || "");
+            taskSelect.appendChild(opt);
+          });
+          document.getElementById("tasksEmpty").hidden = tasks.length > 0;
+          document.getElementById("form-update").hidden = tasks.length === 0;
+
+          var ownerSelect = document.getElementById("ownerId");
+          ownerSelect.innerHTML = '<option value="">— اختر —</option>';
+          assignees.forEach(function (u) {
+            var opt = document.createElement("option");
+            opt.value = u._id;
+            var tag =
+              u.contractType === "external"
+                ? "عقد خارجي"
+                : u.role || "";
+            opt.textContent = u.name + (tag ? " · " + tag : "");
+            ownerSelect.appendChild(opt);
+          });
+          document.getElementById("assigneesEmpty").hidden =
+            assignees.length > 0;
+          document.getElementById("form-assign").hidden =
+            assignees.length === 0;
+        }
+
+        async function loadPending() {
+          try {
+            var db = await openQueue();
+            var tx = db.transaction(QUEUE_STORE, "readonly");
+            pending = (await idbReq(tx.objectStore(QUEUE_STORE).getAll())) || [];
+            db.close();
+            pending.sort(function (a, b) {
+              return String(a.createdAt).localeCompare(String(b.createdAt));
+            });
+          } catch (e) {
+            pending = [];
+          }
+
+          document.getElementById("pendingCount").textContent = String(
+            pending.length
+          );
+          var list = document.getElementById("pendingList");
+          if (!pending.length) {
+            list.innerHTML = '<p class="hint">لا عمليات معلّقة</p>';
+            return;
+          }
+          list.innerHTML = pending
+            .map(function (p) {
+              var kind =
+                p.type === "create_task"
+                  ? "إسناد"
+                  : p.type === "create_update"
+                    ? "تحديث"
+                    : "قرار";
+              var when = "";
+              try {
+                when = new Date(p.createdAt).toLocaleString("ar-SY");
+              } catch (e) {
+                when = p.createdAt || "";
+              }
+              return (
+                '<div class="pending-item"><div><strong>' +
+                escapeHtml(p.label || "") +
+                "</strong></div><div class=\"meta\">" +
+                escapeHtml(when) +
+                " · " +
+                kind +
+                "</div></div>"
+              );
+            })
+            .join("");
+        }
+
+        function escapeHtml(s) {
+          return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+        }
+
+        async function enqueue(action) {
+          var db = await openQueue();
+          var tx = db.transaction(QUEUE_STORE, "readwrite");
+          await idbReq(tx.objectStore(QUEUE_STORE).put(action));
+          db.close();
+        }
+
+        function updateOnlineUi() {
+          var online = navigator.onLine;
+          document.getElementById("statusText").textContent = online
+            ? "الاتصال متاح — يمكنك العودة للنظام أو إعادة المحاولة"
+            : "أضف تحديثًا أو أسند مهمة الآن، ويُرسل تلقائيًا عند توفر الإنترنت";
+          document.getElementById("backLink").hidden = !online;
+          document.getElementById("syncBtn").hidden = !(
+            online && pending.length > 0
+          );
+        }
+
+        document.querySelectorAll(".tab").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            showTab(btn.getAttribute("data-tab"));
+          });
+        });
+
+        document.getElementById("retryBtn").addEventListener("click", function () {
+          window.location.href = "/dashboard";
+        });
+
+        document.getElementById("syncBtn").addEventListener("click", function () {
+          window.location.href = "/dashboard";
+        });
+
+        document
+          .getElementById("ownerId")
+          .addEventListener("change", function () {
+            var user = assignees.find(function (a) {
+              return a._id === document.getElementById("ownerId").value;
+            });
+            var depts = ownerDepts(user);
+            var field = document.getElementById("deptField");
+            var select = document.getElementById("departmentId");
+            select.innerHTML = '<option value="">اختر القسم...</option>';
+            if (depts.length > 1) {
+              field.hidden = false;
+              select.required = true;
+              depts.forEach(function (d) {
+                var opt = document.createElement("option");
+                opt.value = d._id;
+                opt.textContent = d.name;
+                select.appendChild(opt);
+              });
+            } else {
+              field.hidden = true;
+              select.required = false;
+              if (depts.length === 1) select.value = depts[0]._id;
+            }
+          });
+
+        document
+          .getElementById("form-update")
+          .addEventListener("submit", async function (e) {
+            e.preventDefault();
+            var taskId = document.getElementById("taskId").value;
+            var text = document.getElementById("updateText").value.trim();
+            if (!taskId || !text) {
+              setMsg("err", "أكمل الحقول المطلوبة");
+              return;
+            }
+            var task = tasks.find(function (t) {
+              return t._id === taskId;
+            });
+            try {
+              await enqueue({
+                id: newId(),
+                type: "create_update",
+                label: "تحديث على " + ((task && task.taskNo) || taskId),
+                createdAt: new Date().toISOString(),
+                payload: {
+                  taskId: taskId,
+                  workPerformed: text,
+                  result: "",
+                  nextAction: "",
+                  date: today(),
+                },
+              });
+              document.getElementById("updateText").value = "";
+              await loadPending();
+              updateOnlineUi();
+              setMsg("ok", "تم حفظ التحديث — سيُرسل عند توفر الإنترنت");
+              showTab("pending");
+            } catch (err) {
+              setMsg("err", "فشل الحفظ المحلي");
+            }
+          });
+
+        document
+          .getElementById("form-assign")
+          .addEventListener("submit", async function (e) {
+            e.preventDefault();
+            var title = document.getElementById("title").value.trim();
+            var ownerId = document.getElementById("ownerId").value;
+            var order = document.getElementById("order").value.trim();
+            var targetDate = document.getElementById("targetDate").value;
+            var description = document
+              .getElementById("description")
+              .value.trim();
+            var user = assignees.find(function (a) {
+              return a._id === ownerId;
+            });
+            var depts = ownerDepts(user);
+            var departmentId = document.getElementById("departmentId").value;
+            if (depts.length > 1 && !departmentId) {
+              setMsg("err", "اختر القسم");
+              return;
+            }
+            if (!title || !ownerId || !order || !targetDate) {
+              setMsg("err", "أكمل الحقول المطلوبة");
+              return;
+            }
+            var dept =
+              departmentId || (depts.length === 1 ? depts[0]._id : undefined);
+            try {
+              await enqueue({
+                id: newId(),
+                type: "create_task",
+                label: "إسناد مهمة: " + title,
+                createdAt: new Date().toISOString(),
+                payload: {
+                  name: title,
+                  description: description,
+                  ownerId: ownerId,
+                  departmentId: dept || undefined,
+                  priority: "متوسطة",
+                  status: "لم تبدأ",
+                  assignedDate: today(),
+                  targetDate: targetDate,
+                  managementDecision: order,
+                  nextAction: order,
+                  progress: 0,
+                },
+              });
+              document.getElementById("form-assign").reset();
+              document.getElementById("deptField").hidden = true;
+              document.getElementById("targetDate").min = today();
+              await loadPending();
+              updateOnlineUi();
+              setMsg("ok", "تم حفظ الإسناد — سيُرسل عند توفر الإنترنت");
+              showTab("pending");
+            } catch (err) {
+              setMsg("err", "فشل الحفظ المحلي");
+            }
+          });
+
+        document.getElementById("targetDate").min = today();
+
+        window.addEventListener("online", updateOnlineUi);
+        window.addEventListener("offline", updateOnlineUi);
+
+        Promise.all([loadCatalog(), loadPending()]).then(updateOnlineUi);
+      })();
+    </script>
+  </body>
+</html>
