@@ -7,7 +7,10 @@ import {
   getVisibleTaskFilter,
   resolveManagerDepartmentIds,
 } from "@/lib/permissions";
-import { getManagedDepartmentIds } from "@/lib/departments";
+import {
+  getManagedDepartmentIds,
+  isCeoControlledDepartmentId,
+} from "@/lib/departments";
 import { requireSessionUser } from "@/lib/session";
 import { addTimelineEntry } from "@/lib/timeline";
 import { notifyTaskAssigned } from "@/lib/notifications";
@@ -15,7 +18,7 @@ import { DailyUpdate } from "@/models/DailyUpdate";
 import { Task } from "@/models/Task";
 import { User } from "@/models/User";
 import { Department } from "@/models/Department";
-import { ROLE_LABELS, CEO_DEPARTMENT_NAME, type UserRole } from "@/constants/lookups";
+import { ROLE_LABELS, type UserRole } from "@/constants/lookups";
 
 export async function GET(request: Request) {
   try {
@@ -208,18 +211,22 @@ export async function POST(request: Request) {
 
     const owner = await User.findById(body.ownerId);
     if (!owner) return jsonError("المسؤول غير موجود", 404);
-    const isExternalEmployee =
-      owner.role === "employee" && owner.contractType === "external";
+    const ownerDeptUnderCeo = await isCeoControlledDepartmentId(
+      owner.departmentId
+    );
+    const isCeoDirectEmployee =
+      owner.role === "employee" &&
+      (owner.contractType === "external" || ownerDeptUnderCeo);
 
     if (user.role === "general_manager") {
       if (
         owner.role !== "ceo" &&
         owner.role !== "hr" &&
         owner.role !== "manager" &&
-        !isExternalEmployee
+        !isCeoDirectEmployee
       ) {
         return jsonError(
-          `${ROLE_LABELS.general_manager} يسند المهام لـ${ROLE_LABELS.ceo} والموارد البشرية والمدراء وموظفي العقود الخارجية فقط`,
+          `${ROLE_LABELS.general_manager} يسند المهام لـ${ROLE_LABELS.ceo} والموارد البشرية والمدراء وموظفي أقسامه فقط`,
           403
         );
       }
@@ -242,7 +249,7 @@ export async function POST(request: Request) {
           return jsonError("يجب أن تكون المهمة ضمن أقسام المدير المختار", 403);
         }
       }
-      if (isExternalEmployee && !body.departmentId && !owner.departmentId) {
+      if (isCeoDirectEmployee && !body.departmentId && !owner.departmentId) {
         return jsonError("قسم الموظف غير محدد");
       }
       // CEO / HR may have no department — optional
@@ -255,10 +262,10 @@ export async function POST(request: Request) {
       if (
         owner.role !== "manager" &&
         owner.role !== "hr" &&
-        !isExternalEmployee
+        !isCeoDirectEmployee
       ) {
         return jsonError(
-          `${ROLE_LABELS.ceo} يسند المهام للموارد البشرية والمدراء وموظفي العقود الخارجية فقط`,
+          `${ROLE_LABELS.ceo} يسند المهام للموارد البشرية والمدراء وموظفي أقسامه فقط`,
           403
         );
       }
@@ -281,7 +288,7 @@ export async function POST(request: Request) {
           return jsonError("يجب أن تكون المهمة ضمن أقسام المدير المختار", 403);
         }
       }
-      if (isExternalEmployee && !body.departmentId && !owner.departmentId) {
+      if (isCeoDirectEmployee && !body.departmentId && !owner.departmentId) {
         return jsonError("قسم الموظف غير محدد");
       }
       if (!body.managementDecision && !body.nextAction) {
@@ -290,7 +297,7 @@ export async function POST(request: Request) {
     }
 
     if (user.role === "manager") {
-      if (owner.role !== "employee" || owner.contractType === "external") {
+      if (owner.role !== "employee" || isCeoDirectEmployee) {
         return jsonError("المدير يسند المهام لموظفي فريقه فقط", 403);
       }
       if (!body.departmentId) {
@@ -318,11 +325,11 @@ export async function POST(request: Request) {
       const dept = await Department.findById(departmentId);
       if (!dept) return jsonError("القسم غير موجود", 404);
       if (
-        isExternalEmployee &&
+        isCeoDirectEmployee &&
         owner.departmentId &&
         String(departmentId) !== owner.departmentId.toString()
       ) {
-        return jsonError(`يجب أن تكون المهمة ضمن قسم ${CEO_DEPARTMENT_NAME}`, 403);
+        return jsonError("يجب أن تكون المهمة ضمن قسم الموظف تحت سيطرة الإدارة", 403);
       }
     } else if (owner.role === "manager" || owner.role === "employee") {
       return jsonError("القسم مطلوب لهذا المسؤول");

@@ -10,6 +10,7 @@ import {
 } from "@/lib/permissions";
 import {
   ensureCeoDepartment,
+  getCeoControlledDepartments,
   getManagedDepartments,
   parseDepartmentIds,
   syncManagerDepartments,
@@ -86,6 +87,7 @@ export async function GET() {
       if (managerIds.length > 0) {
         const depts = await Department.find({
           managerId: { $in: managerIds },
+          underCeo: { $ne: true },
         })
           .select("_id name managerId")
           .lean();
@@ -225,9 +227,25 @@ export async function POST(request: Request) {
           : "internal";
 
       if (contractType === "external") {
-        const ceoDept = await ensureCeoDepartment();
+        const ceoDepts = await getCeoControlledDepartments();
+        const ceoDeptIds = ceoDepts.map((d) => d._id);
         managerId = null;
-        departmentId = ceoDept._id;
+        if (body.departmentId) {
+          if (!Types.ObjectId.isValid(String(body.departmentId))) {
+            return jsonError("معرّف القسم غير صالح");
+          }
+          const deptId = String(body.departmentId);
+          if (!ceoDeptIds.includes(deptId)) {
+            return jsonError(
+              "اختر قسمًا تحت سيطرة المدير التنفيذي",
+              403
+            );
+          }
+          departmentId = new Types.ObjectId(deptId);
+        } else {
+          const ceoDept = await ensureCeoDepartment();
+          departmentId = ceoDept._id;
+        }
       } else {
         if (!body.managerId || !Types.ObjectId.isValid(String(body.managerId))) {
           return jsonError("اختر المدير المسؤول");
@@ -308,7 +326,13 @@ export async function POST(request: Request) {
     if (createRole === "manager") {
       try {
         await syncManagerDepartments(created._id, managerDeptIds);
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.message === "CEO_CONTROLLED_DEPARTMENT") {
+          return jsonError(
+            "لا يمكن إسناد أقسام تحت سيطرة المدير التنفيذي للمدراء",
+            403
+          );
+        }
         return jsonError("قسم غير موجود", 404);
       }
     }

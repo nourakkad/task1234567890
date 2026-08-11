@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/PageHeader";
 import { matchesSearch, SearchField } from "@/components/SearchField";
+import { ROLE_LABELS, CEO_DEPARTMENT_NAME } from "@/constants/lookups";
 import { apiGet, apiSend } from "@/lib/client";
 
 interface Department {
   _id: string;
   name: string;
+  underCeo?: boolean;
   managerId?: { _id?: string; name?: string; email?: string } | null;
 }
 
@@ -18,16 +20,24 @@ export default function HrDepartmentsPage() {
   const router = useRouter();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [name, setName] = useState("");
+  const [underCeo, setUnderCeo] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(
     () =>
       departments.filter((d) =>
-        matchesSearch(query, d.name, d.managerId?.name, d.managerId?.email)
+        matchesSearch(
+          query,
+          d.name,
+          d.managerId?.name,
+          d.managerId?.email,
+          d.underCeo ? ROLE_LABELS.ceo : ""
+        )
       ),
     [departments, query]
   );
@@ -56,8 +66,12 @@ export default function HrDepartmentsPage() {
     }
     setLoading(true);
     try {
-      await apiSend("/api/departments", "POST", { name: trimmed });
+      await apiSend("/api/departments", "POST", {
+        name: trimmed,
+        underCeo,
+      });
       setName("");
+      setUnderCeo(false);
       await load();
       setMessage("تم إضافة القسم");
     } catch (err) {
@@ -78,6 +92,28 @@ export default function HrDepartmentsPage() {
       setMessage("تم تحديث اسم القسم");
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل التحديث");
+    }
+  }
+
+  async function onToggleUnderCeo(dept: Department, next: boolean) {
+    setBusyId(dept._id);
+    setError("");
+    setMessage("");
+    try {
+      await apiSend("/api/departments", "PATCH", {
+        id: dept._id,
+        underCeo: next,
+      });
+      await load();
+      setMessage(
+        next
+          ? `تم وضع القسم تحت سيطرة ${ROLE_LABELS.ceo}`
+          : "تم إلغاء سيطرة المدير التنفيذي عن القسم"
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل التحديث");
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -113,7 +149,7 @@ export default function HrDepartmentsPage() {
     <div>
       <PageHeader
         title="إدارة الأقسام"
-        subtitle="أضف أقسامًا جديدة أو عدّل أو احذف الأقسام"
+        subtitle="أضف أقسامًا جديدة أو عدّل أو احذف الأقسام — ويمكن وضع القسم تحت سيطرة المدير التنفيذي"
       />
       {error ? <p className="mb-3 text-[var(--danger)]">{error}</p> : null}
       {message ? <p className="mb-3 text-[var(--ok)]">{message}</p> : null}
@@ -133,29 +169,46 @@ export default function HrDepartmentsPage() {
                 : "لا توجد أقسام بعد"}
             </div>
           ) : (
-            filtered.map((d) => (
-              <div key={d._id} className="card p-4">
-                <div className="field">
-                  <label htmlFor={`dept-${d._id}`}>اسم القسم</label>
-                  <input
-                    id={`dept-${d._id}`}
-                    defaultValue={d.name}
-                    onBlur={(e) => onRename(d._id, e.target.value, d.name)}
-                  />
+            filtered.map((d) => {
+              const isSystem = d.name === CEO_DEPARTMENT_NAME;
+              return (
+                <div key={d._id} className="card p-4">
+                  <div className="field">
+                    <label htmlFor={`dept-${d._id}`}>اسم القسم</label>
+                    <input
+                      id={`dept-${d._id}`}
+                      defaultValue={d.name}
+                      disabled={isSystem}
+                      onBlur={(e) => onRename(d._id, e.target.value, d.name)}
+                    />
+                  </div>
+                  <div className="mt-3 text-sm text-[var(--muted)]">
+                    {d.underCeo
+                      ? `تحت ${ROLE_LABELS.ceo} مباشرة`
+                      : `المدير: ${d.managerId?.name || "غير معيّن"}`}
+                  </div>
+                  <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(d.underCeo)}
+                      disabled={isSystem || busyId === d._id}
+                      onChange={(e) =>
+                        onToggleUnderCeo(d, e.target.checked)
+                      }
+                    />
+                    <span>تحت سيطرة {ROLE_LABELS.ceo}</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-secondary mt-4 w-full text-sm text-[var(--danger)]"
+                    disabled={deletingId === d._id || isSystem}
+                    onClick={() => onDelete(d)}
+                  >
+                    {deletingId === d._id ? "جارٍ الحذف..." : "حذف القسم"}
+                  </button>
                 </div>
-                <div className="mt-3 text-sm text-[var(--muted)]">
-                  المدير: {d.managerId?.name || "غير معيّن"}
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary mt-4 w-full text-sm text-[var(--danger)]"
-                  disabled={deletingId === d._id}
-                  onClick={() => onDelete(d)}
-                >
-                  {deletingId === d._id ? "جارٍ الحذف..." : "حذف القسم"}
-                </button>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -172,11 +225,25 @@ export default function HrDepartmentsPage() {
               maxLength={80}
             />
           </div>
-          <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={underCeo}
+              onChange={(e) => setUnderCeo(e.target.checked)}
+            />
+            <span>تحت سيطرة {ROLE_LABELS.ceo}</span>
+          </label>
+          <button
+            type="submit"
+            className="btn btn-primary w-full"
+            disabled={loading}
+          >
             {loading ? "جارٍ الحفظ..." : "إضافة القسم"}
           </button>
           <p className="text-xs text-[var(--muted)]">
-            بعد إنشاء القسم عيّن مديرًا له من صفحة المدراء.
+            {underCeo
+              ? `القسم سيكون تحت ${ROLE_LABELS.ceo} مباشرة (مثل العقود الخارجية) بدون مدير.`
+              : "بعد إنشاء القسم عيّن مديرًا له من صفحة المدراء."}
           </p>
         </form>
       </div>

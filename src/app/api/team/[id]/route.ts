@@ -9,6 +9,7 @@ import {
 } from "@/lib/permissions";
 import {
   ensureCeoDepartment,
+  getCeoControlledDepartments,
   getManagedDepartments,
   parseDepartmentIds,
   syncManagerDepartments,
@@ -117,7 +118,13 @@ export async function PATCH(request: Request, { params }: Params) {
       try {
         const oids = await syncManagerDepartments(target._id, ids);
         target.departmentId = oids[0] || null;
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.message === "CEO_CONTROLLED_DEPARTMENT") {
+          return jsonError(
+            "لا يمكن إسناد أقسام تحت سيطرة المدير التنفيذي للمدراء",
+            403
+          );
+        }
         return jsonError("قسم غير موجود", 404);
       }
     }
@@ -133,10 +140,26 @@ export async function PATCH(request: Request, { params }: Params) {
             : "internal";
 
       if (nextContract === "external") {
-        const ceoDept = await ensureCeoDepartment();
+        const ceoDepts = await getCeoControlledDepartments();
+        const ceoDeptIds = ceoDepts.map((d) => d._id);
         target.contractType = "external";
         target.managerId = null;
-        target.departmentId = ceoDept._id;
+        if (body.departmentId) {
+          if (!Types.ObjectId.isValid(String(body.departmentId))) {
+            return jsonError("معرّف القسم غير صالح");
+          }
+          const deptId = String(body.departmentId);
+          if (!ceoDeptIds.includes(deptId)) {
+            return jsonError(
+              "اختر قسمًا تحت سيطرة المدير التنفيذي",
+              403
+            );
+          }
+          target.departmentId = new Types.ObjectId(deptId);
+        } else {
+          const ceoDept = await ensureCeoDepartment();
+          target.departmentId = ceoDept._id;
+        }
       } else {
         target.contractType = "internal";
 

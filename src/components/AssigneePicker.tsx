@@ -1,9 +1,7 @@
 "use client";
 
 import {
-  CONTRACT_TYPE_LABELS,
   ROLE_LABELS,
-  type ContractType,
   type UserRole,
 } from "@/constants/lookups";
 
@@ -12,7 +10,12 @@ export interface AssigneeOption {
   name: string;
   role: string;
   contractType?: ContractType | string;
-  departmentId?: { _id?: string; name?: string } | string | null;
+  underCeo?: boolean;
+  departmentId?: {
+    _id?: string;
+    name?: string;
+    underCeo?: boolean;
+  } | string | null;
 }
 
 type Props = {
@@ -50,8 +53,12 @@ export function AssigneePicker({
     >
       {users.map((u) => {
         const selected = value === u._id;
-        const isExternal =
-          u.role === "employee" && u.contractType === "external";
+        const isCeoDirect =
+          u.role === "employee" &&
+          (u.contractType === "external" ||
+            u.underCeo ||
+            (typeof u.departmentId === "object" &&
+              Boolean(u.departmentId?.underCeo)));
         const roleLabel = ROLE_LABELS[u.role as UserRole] || u.role;
         const deptName =
           typeof u.departmentId === "object" && u.departmentId?.name
@@ -74,13 +81,15 @@ export function AssigneePicker({
             <div className="font-semibold">{u.name}</div>
             <div
               className={`mt-0.5 text-xs ${
-                isExternal
+                isCeoDirect
                   ? "font-semibold text-[var(--brand)]"
                   : "text-[var(--muted)]"
               }`}
             >
-              {isExternal
-                ? `${ROLE_LABELS.employee} · ${CONTRACT_TYPE_LABELS.external}`
+              {isCeoDirect
+                ? `${ROLE_LABELS.employee} · تحت ${ROLE_LABELS.ceo}${
+                    deptName ? ` · ${deptName}` : ""
+                  }`
                 : [roleLabel, deptName].filter(Boolean).join(" · ")}
             </div>
           </button>

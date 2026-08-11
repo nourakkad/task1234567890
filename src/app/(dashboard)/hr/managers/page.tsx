@@ -27,6 +27,7 @@ interface TeamUser {
 interface Department {
   _id: string;
   name: string;
+  underCeo?: boolean;
   managerId?: { _id?: string; name?: string } | null;
 }
 
@@ -60,6 +61,11 @@ export default function HrManagersPage() {
         return matchesSearch(query, u.name, u.email, ...deptNames);
       }),
     [users, query]
+  );
+
+  const managerDepartments = useMemo(
+    () => departments.filter((d) => !d.underCeo),
+    [departments]
   );
 
   async function load() {
@@ -263,10 +269,10 @@ export default function HrManagersPage() {
           <div className="field">
             <label>الأقسام (يمكن اختيار أكثر من واحد)</label>
             <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border border-[var(--line)] p-2">
-              {departments.length === 0 ? (
+              {managerDepartments.length === 0 ? (
                 <p className="text-xs text-[var(--muted)]">لا أقسام بعد — أنشئ قسمًا أدناه</p>
               ) : (
-                departments.map((d) => (
+                managerDepartments.map((d) => (
                   <label
                     key={d._id}
                     className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-[var(--brand-soft)]"
@@ -334,7 +340,7 @@ export default function HrManagersPage() {
             <div className="field">
               <label>الأقسام المسؤولة</label>
               <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-[var(--line)] p-2">
-                {departments.map((d) => (
+                {managerDepartments.map((d) => (
                   <label
                     key={d._id}
                     className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-[var(--brand-soft)]"

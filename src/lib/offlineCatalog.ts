@@ -267,6 +267,55 @@ export async function replaceCachedTasks(tasks: TaskLike[]): Promise<void> {
   }
 }
 
+/** Remove one task from list + detail caches (deleted or closed remotely). */
+export async function removeCachedTask(taskId: string): Promise<void> {
+  const id = String(taskId || "");
+  if (!id) return;
+  try {
+    const db = await openDb();
+    const tx = db.transaction([TASKS, DETAILS], "readwrite");
+    tx.objectStore(TASKS).delete(id);
+    tx.objectStore(DETAILS).delete(id);
+    await waitForTx(tx);
+    db.close();
+  } catch {
+    // ignore
+  }
+}
+
+/** Drop any locally cached completed/cancelled tasks (list + details). */
+export async function pruneClosedCachedTasks(): Promise<void> {
+  try {
+    const db = await openDb();
+    const listRows = await idbReq<CachedTask[]>(
+      db.transaction(TASKS, "readonly").objectStore(TASKS).getAll()
+    );
+    const detailRows = await idbReq<CachedTaskDetail[]>(
+      db.transaction(DETAILS, "readonly").objectStore(DETAILS).getAll()
+    );
+    const dropIds = new Set<string>();
+    for (const row of listRows || []) {
+      if (!isActiveTaskStatus(row.status)) dropIds.add(String(row._id));
+    }
+    for (const row of detailRows || []) {
+      if (!isActiveTaskStatus(row.status)) dropIds.add(String(row._id));
+    }
+    if (dropIds.size === 0) {
+      db.close();
+      return;
+    }
+    const tx = db.transaction([TASKS, DETAILS], "readwrite");
+    for (const id of dropIds) {
+      tx.objectStore(TASKS).delete(id);
+      tx.objectStore(DETAILS).delete(id);
+    }
+    await waitForTx(tx);
+    db.close();
+  } catch {
+    // ignore
+  }
+}
+
 async function markDetailsOnList(): Promise<void> {
   try {
     const db = await openDb();
@@ -289,17 +338,24 @@ async function markDetailsOnList(): Promise<void> {
   }
 }
 
-/** Upsert active tasks into the cache (skips completed/cancelled). */
+/** Upsert active tasks; also remove any in this batch that are closed. */
 export async function rememberTasks(tasks: TaskLike[]): Promise<void> {
-  const active = filterActiveTasks(tasks);
-  if (!active.length) return;
+  if (!tasks?.length) return;
   try {
     const db = await openDb();
-    const tx = db.transaction(TASKS, "readwrite");
-    const store = tx.objectStore(TASKS);
-    for (const t of active) {
+    const tx = db.transaction([TASKS, DETAILS], "readwrite");
+    const listStore = tx.objectStore(TASKS);
+    const detailStore = tx.objectStore(DETAILS);
+    for (const t of tasks) {
+      const id = refId(t._id);
+      if (!id) continue;
+      if (!isActiveTaskStatus(t.status)) {
+        listStore.delete(id);
+        detailStore.delete(id);
+        continue;
+      }
       const row = toCachedTask(t);
-      if (row) store.put(row);
+      if (row) listStore.put(row);
     }
     await waitForTx(tx);
     db.close();

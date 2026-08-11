@@ -471,7 +471,8 @@ function Section({
               </div>
               {showManager ? (
                 <div className="text-sm text-[var(--muted)]">
-                  {u.role === "employee" && u.contractType === "external"
+                  {u.role === "employee" &&
+                  (u.contractType === "external" || !u.managerId)
                     ? `تحت ${ROLE_LABELS.ceo} مباشرة`
                     : `المدير: ${u.managerId?.name || "—"}`}
                 </div>

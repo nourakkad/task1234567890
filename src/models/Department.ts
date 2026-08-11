@@ -4,6 +4,8 @@ export interface IDepartment {
   _id: Types.ObjectId;
   name: string;
   managerId?: Types.ObjectId | null;
+  /** When true, department is under CEO (like external-contract track). */
+  underCeo?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -12,6 +14,7 @@ const DepartmentSchema = new Schema<IDepartment>(
   {
     name: { type: String, required: true, unique: true },
     managerId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    underCeo: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -24,15 +24,20 @@ import {
 } from "@/lib/offlineQueue";
 import {
   isActiveTaskStatus,
+  pruneClosedCachedTasks,
   rememberAssignees,
   rememberOfflineSession,
   rememberTaskDetail,
+  removeCachedTask,
   replaceCachedTasks,
   type CachedAssignee,
   type OfflineActionMode,
   type UpdateLike,
 } from "@/lib/offlineCatalog";
-import { emitNotificationsUpdate } from "@/hooks/useLiveNotifications";
+import {
+  emitNotificationsUpdate,
+  useLiveNotifications,
+} from "@/hooks/useLiveNotifications";
 
 async function fetchJsonQuiet<T>(url: string): Promise<T | null> {
   try {
@@ -49,6 +54,28 @@ async function fetchJsonQuiet<T>(url: string): Promise<T | null> {
     return null;
   }
 }
+
+/** Distinguishes deleted (404) from other failures so we can prune local cache. */
+async function fetchTaskDetail(
+  id: string
+): Promise<"missing" | "error" | Record<string, unknown>> {
+  try {
+    const res = await fetch(`/api/tasks/${id}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (res.status === 404) return "missing";
+    if (!res.ok) return "error";
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) return "error";
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return "error";
+  }
+}
+
+const CATALOG_POLL_MS = 45_000;
 
 type EnqueueInput = {
   type: OfflineActionType;
@@ -111,6 +138,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
       type Bucket = { mode: OfflineActionMode; rows: TaskRow[] };
       const buckets: Bucket[] = [];
+      let listSynced = false;
 
       const owned =
         (await fetchJsonQuiet<TaskRow[]>("/api/tasks?ownedByMe=1")) ||
@@ -125,6 +153,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           : null);
 
       if (Array.isArray(owned)) {
+        listSynced = true;
         buckets.push({
           mode: "update",
           rows: owned.filter((t) => isActiveTaskStatus(t.status)),
@@ -136,6 +165,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           "/api/tasks?teamAssigned=1"
         );
         if (Array.isArray(team)) {
+          listSynced = true;
           buckets.push({
             mode: "decision",
             rows: team.filter((t) => isActiveTaskStatus(t.status)),
@@ -148,6 +178,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           "/api/tasks?managerTasks=1"
         );
         if (Array.isArray(tracked)) {
+          listSynced = true;
           buckets.push({
             mode: "decision",
             rows: tracked.filter((t) => isActiveTaskStatus(t.status)),
@@ -160,6 +191,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           "/api/tasks?leadershipTasks=1"
         );
         if (Array.isArray(tracked)) {
+          listSynced = true;
           buckets.push({
             mode: "decision",
             rows: tracked.filter((t) => isActiveTaskStatus(t.status)),
@@ -174,8 +206,10 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         }
       }
       const merged = [...byId.values()];
-      if (merged.length > 0 || buckets.some((b) => Array.isArray(b.rows))) {
+      // Full replace when server lists loaded — clears deleted/completed locally
+      if (listSynced) {
         await replaceCachedTasks(merged);
+        await pruneClosedCachedTasks();
       }
 
       const canAssign =
@@ -200,16 +234,19 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           seen.add(id);
           if (seen.size > PREFETCH_CAP) break;
           const [detail, updates] = await Promise.all([
-            fetchJsonQuiet<Record<string, unknown>>(`/api/tasks/${id}`),
+            fetchTaskDetail(id),
             fetchJsonQuiet<UpdateLike[]>(`/api/updates?taskId=${id}`),
           ]);
-          if (detail) {
-            await rememberTaskDetail(
-              detail,
-              Array.isArray(updates) ? updates : [],
-              b.mode
-            );
+          if (detail === "missing") {
+            await removeCachedTask(id);
+            continue;
           }
+          if (detail === "error" || !detail) continue;
+          await rememberTaskDetail(
+            detail,
+            Array.isArray(updates) ? updates : [],
+            b.mode
+          );
         }
         if (seen.size > PREFETCH_CAP) break;
       }
@@ -315,6 +352,36 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       void refreshCatalog();
     }
   }, [sessionStatus, refreshCatalog]);
+
+  // Keep local DB in sync while online: poll + tab focus + new notifications
+  useEffect(() => {
+    if (sessionStatus !== "authenticated") return;
+
+    const tick = () => {
+      if (!isBrowserOnline()) return;
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState === "hidden"
+      ) {
+        return;
+      }
+      void refreshCatalog();
+    };
+
+    const t = setInterval(tick, CATALOG_POLL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [sessionStatus, refreshCatalog]);
+
+  useLiveNotifications(() => {
+    if (isBrowserOnline()) void refreshCatalog();
+  }, sessionStatus === "authenticated");
 
   const value = useMemo<OfflineSyncContextValue>(
     () => ({

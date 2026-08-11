@@ -688,6 +688,46 @@
               var s = String(t.status || "");
               return s !== "مكتملة" && s !== "ملغاة";
             });
+            // Drop closed rows from IndexedDB so they don't linger offline
+            try {
+              var dbWrite = await openCatalog();
+              if (dbWrite.objectStoreNames.contains(TASKS)) {
+                var allKeys = await idbReq(
+                  dbWrite
+                    .transaction(TASKS, "readonly")
+                    .objectStore(TASKS)
+                    .getAll()
+                );
+                var closed = (allKeys || []).filter(function (t) {
+                  var s = String(t.status || "");
+                  return s === "مكتملة" || s === "ملغاة";
+                });
+                if (closed.length) {
+                  var names = [TASKS];
+                  if (dbWrite.objectStoreNames.contains("taskDetails")) {
+                    names.push("taskDetails");
+                  }
+                  var wtx = dbWrite.transaction(names, "readwrite");
+                  closed.forEach(function (t) {
+                    wtx.objectStore(TASKS).delete(t._id);
+                    if (names.indexOf("taskDetails") >= 0) {
+                      wtx.objectStore("taskDetails").delete(t._id);
+                    }
+                  });
+                  await new Promise(function (resolve, reject) {
+                    wtx.oncomplete = function () {
+                      resolve();
+                    };
+                    wtx.onerror = function () {
+                      reject(wtx.error);
+                    };
+                  });
+                }
+              }
+              dbWrite.close();
+            } catch (e) {
+              // ignore prune errors
+            }
             assignees.sort(function (a, b) {
               return String(a.name || "").localeCompare(
                 String(b.name || ""),
@@ -1035,6 +1075,48 @@
           );
         }
 
+        async function probeInternet() {
+          if (!navigator.onLine) return false;
+          try {
+            var ctrl = new AbortController();
+            var timer = setTimeout(function () {
+              ctrl.abort();
+            }, 5000);
+            var res = await fetch("/api/auth/session", {
+              method: "GET",
+              cache: "no-store",
+              credentials: "same-origin",
+              headers: { Accept: "application/json" },
+              signal: ctrl.signal,
+            });
+            clearTimeout(timer);
+            return res.ok;
+          } catch (e) {
+            return false;
+          }
+        }
+
+        async function tryGoOnline(btn) {
+          setMsg("", "");
+          if (btn) {
+            btn.disabled = true;
+            btn.textContent = "جارٍ التحقق...";
+          }
+          var ok = await probeInternet();
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent =
+              btn.id === "syncBtn" ? "مزامنة" : "إعادة المحاولة";
+          }
+          if (ok) {
+            setMsg("ok", "تم الاتصال — جارٍ الانتقال...");
+            window.location.href = "/dashboard";
+            return;
+          }
+          setMsg("err", "لا يوجد إنترنت");
+          updateOnlineUi();
+        }
+
         document.querySelectorAll(".tab").forEach(function (btn) {
           btn.addEventListener("click", function () {
             showTab(btn.getAttribute("data-tab"));
@@ -1046,10 +1128,10 @@
             showTab("tasks");
           });
         document.getElementById("retryBtn").addEventListener("click", function () {
-          window.location.href = "/dashboard";
+          void tryGoOnline(document.getElementById("retryBtn"));
         });
         document.getElementById("syncBtn").addEventListener("click", function () {
-          window.location.href = "/dashboard";
+          void tryGoOnline(document.getElementById("syncBtn"));
         });
 
         document

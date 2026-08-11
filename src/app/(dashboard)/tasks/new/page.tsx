@@ -15,7 +15,12 @@ interface AssignableUser {
   name: string;
   role: string;
   contractType?: string;
-  departmentId?: { _id: string; name: string } | string | null;
+  underCeo?: boolean;
+  departmentId?: {
+    _id: string;
+    name: string;
+    underCeo?: boolean;
+  } | string | null;
   managedDepartments?: Array<{ _id: string; name: string }>;
 }
 
@@ -73,9 +78,12 @@ export default function NewTaskPage() {
   const managerNeedsDeptFirst = isManager && managerDepartments.length > 1;
 
   const selectedOwner = users.find((u) => u._id === form.ownerId);
-  const isExternalOwner =
+  const isCeoDirectOwner =
     selectedOwner?.role === "employee" &&
-    selectedOwner.contractType === "external";
+    (selectedOwner.contractType === "external" ||
+      selectedOwner.underCeo ||
+      (typeof selectedOwner.departmentId === "object" &&
+        Boolean(selectedOwner.departmentId?.underCeo)));
   const ownerNeedsNoDept =
     selectedOwner?.role === "ceo" || selectedOwner?.role === "hr";
 
@@ -176,7 +184,7 @@ export default function NewTaskPage() {
     !isManager &&
     Boolean(selectedOwner) &&
     !ownerNeedsNoDept &&
-    !isExternalOwner &&
+    !isCeoDirectOwner &&
     ownerDepartments.length > 1;
 
   function onManagerDepartmentChange(departmentId: string) {
@@ -297,19 +305,19 @@ export default function NewTaskPage() {
   const title = isGm
     ? "تكليف تنفيذي / موارد بشرية / مدير"
     : isCeo
-      ? "تكليف موارد بشرية أو مدير أو عقد خارجي"
+      ? "تكليف موارد بشرية أو مدير أو موظفي أقسامك"
       : "تكليف موظف بمهمة";
 
   const subtitle = isGm
-    ? `${ROLE_LABELS.general_manager} يسند المهام لـ${ROLE_LABELS.ceo} والموارد البشرية والمدراء وموظفي العقود الخارجية`
+    ? `${ROLE_LABELS.general_manager} يسند المهام لـ${ROLE_LABELS.ceo} والموارد البشرية والمدراء وموظفي أقسام التنفيذي`
     : isCeo
-      ? `${ROLE_LABELS.ceo} يسند المهام للموارد البشرية والمدراء وموظفي العقود الخارجية`
+      ? `${ROLE_LABELS.ceo} يسند المهام للموارد البشرية والمدراء وموظفي الأقسام تحت سيطرته`
       : "المدير يسند المهام لموظفي فريقه مع أمر واضح";
 
   const ownerLabel = isGm
-    ? "المسؤول (تنفيذي / موارد بشرية / مدير / عقد خارجي)"
+    ? "المسؤول (تنفيذي / موارد بشرية / مدير / تحت التنفيذي)"
     : isCeo
-      ? "المسؤول (موارد بشرية / مدير / عقد خارجي)"
+      ? "المسؤول (موارد بشرية / مدير / تحت التنفيذي)"
       : "الموظف المسؤول";
 
   const visibleAssignees = isManager ? managerVisibleUsers : users;
@@ -420,9 +428,9 @@ export default function NewTaskPage() {
               </div>
             ) : null}
 
-            {isExternalOwner ? (
+            {isCeoDirectOwner ? (
               <div className="md:col-span-2 rounded-xl border border-[var(--line)] bg-[var(--brand-soft)] px-3 py-2.5 text-sm font-semibold text-[var(--brand)]">
-                عقد خارجي
+                تحت {ROLE_LABELS.ceo} مباشرة
               </div>
             ) : null}
           </>
